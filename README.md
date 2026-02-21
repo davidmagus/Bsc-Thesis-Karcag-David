@@ -5,3 +5,4 @@
 - Template logginghoz
 - Tobb korlat
 - Utak jegyzese
+- Teszteles
