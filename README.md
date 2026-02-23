@@ -1,8 +1,8 @@
 # Thesis
 
+
 ## Todo
 ### STSP
-- Template logginghoz
-- Tobb korlat
-- Utak jegyzese
-- Teszteles
+- debug
+- Több korlát
+- Tesztelés
