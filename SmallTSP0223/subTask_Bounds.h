@@ -72,6 +72,8 @@ namespace bound{
             ListGraph::Edge uv = g.addEdge(V[2* G_index[G.source(a)]], V[1 + 2* G_index[G.target(a)]]);
             cost[uv] = -weight[a];
         }
+
+        //Ezt majd egy tryba kell rakni és ha eldobja vmi nagy számot beállítani
         MaxWeightedPerfectMatching<ListGraph, ListGraph::EdgeMap<double>> M_ALG(g, cost);
         M_ALG.run();
 
