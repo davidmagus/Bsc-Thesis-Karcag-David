@@ -22,7 +22,7 @@ namespace bound{
             if(weight[a] < minarc){ minarc = weight[a];}
             _lbound += (weight)[a]; 
         }
-        return _lbound + minarc;
+        return _lbound;
     };
 
     struct SST
