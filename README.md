@@ -51,9 +51,9 @@ A beolvasás a main függvényben, illetve a variadic template szintaktika a log
 
 ## Az alsó korlát header
 Ez a fájl structokat tartalmaz amik, egy adott részfeladatra adnak alsó becslést. Fő célja az STSP solver segítése de próbáltam olyan absztraktcióval implementálni őket, hogy más feladatokra is a jövöben alkalmazhatók legyenek.
-### SST (Shortest Spanning Tree) !Jelenleg ez nem működőképes
+### SST (Shortest Spanning Tree) (minarc bug)
 Az alg a kruskal algoritmust használja minimális feszítőerdő megtalálására. Ez kézenfekvően alsó becslés
-### AP
+### AP jelenleg nem működik!
   Az összefüggöségi követelmény elhagyásával, keres olyan részgráfot amiben, kettő csúcs (út eleje, vége) kivételével minden csúcs ki és befoka pontosan 1. Mivel a Lemon általam letöltött verziójában valamiért nincs MaxWeightedBipartiteMatching vagy ennek teljes párosítás kereső verziója. Az Edmonds munkáján alapuló MaxWeightedPerfectMatching osztályt használom.
 ### AI use
 none
