@@ -1,10 +1,9 @@
 # Thesis
-
 ## Todo
-- AP korlát befejezése
 - A solver osztály templatté alakítása, upper bound legyen élköltség összeg a std::limits szám helyett, a Label indexelésének ellenőrzése, helyetesítése
 - Ha nincs megoldás viselkedés
-- minarc használatának áttgondolása SST-ben.
+- Warningok átnézése
+- Az éleket egy taskon iterálásban csökkenő sorrendben adjuk hozzá
 - Tesztelés
   - A Rand.cc osztályba átszervezése
 <br>
@@ -14,6 +13,7 @@
 - smallTSPsolver.cc - A kis (egyenlőre csak zárt, 0-ból induló) TSP feladatok megoldására szolgáló osztály.
 - subTask_Bounds.h - Alsó becslések előállításra szolgáló algoritmusok gyüjteménye
 <br>
+
 ## Random példa generálás
 A Sztandard inputról olvas be, három inputot:
 - A példa tipus, egyenlőre mindig "TSP"
@@ -52,9 +52,10 @@ A beolvasás a main függvényben, illetve a variadic template szintaktika a log
 ## Az alsó korlát header
 Ez a fájl structokat tartalmaz amik, egy adott részfeladatra adnak alsó becslést. Fő célja az STSP solver segítése de próbáltam olyan absztraktcióval implementálni őket, hogy más feladatokra is a jövöben alkalmazhatók legyenek.
 ### SST (Shortest Spanning Tree)
-Az alg a kruskal algoritmust használja minimális feszítőerdő megtalálására. Ez kézenfekvően alsó becslés
-### AP 
-Jelenleg nem működik! 
+Az alg a kruskal algoritmust használja minimális feszítőerdő megtalálására. Ez triviálisan jó alsó becslés
+### Brute Force
+Nem végez ellenörzést és a solverben használt constexpr miatt az egész constructbound lépés kioptimalizálódik.
+### AP
   Az összefüggöségi követelmény elhagyásával, keres olyan részgráfot amiben, kettő csúcs (út eleje, vége) kivételével minden csúcs ki és befoka pontosan 1. Mivel a Lemon általam letöltött verziójában valamiért nincs MaxWeightedBipartiteMatching vagy ennek teljes párosítás kereső verziója. Az Edmonds munkáján alapuló MaxWeightedPerfectMatching osztályt használom.
 ### AI use
 none
