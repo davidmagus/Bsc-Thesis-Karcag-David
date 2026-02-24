@@ -19,7 +19,7 @@ A Sztandard inputról olvas be, három inputot:
 - A példa tipus, egyenlőre mindig "TSP"
 - Number of nodes (n): a generálandó gráf csúcsainak száma
 - Edge ratio (mratio): a random generált élek és a csúcsok számának hányadosa, ha nagyobb mind az összes lehetséges él száma akkor $${n}\choose{2}$$
-- Én az echo -e "TSP\n10\n5" | ./Rnd parancs paramétereinek modósításával szoktam futtatni
+- Én az echo -e "TSP\n20\n10" | ./Rnd parancs paramétereinek modósításával szoktam futtatni
 
 A generálás a következő módon zajlik:
 - Veszünk n random egész pontot a síkon ezeknek egy új gráfban megfeleltetünk n csúcsot. Elkezdünk hozzáadni élek egy él hossza mindig az euklédeszi távolság felső egész része.
