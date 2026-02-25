@@ -45,7 +45,7 @@ A Kódot mivel mellékhatás nélküli egyszerű részfeladatot lát el, egy ál
 ## A solver osztály
 A smallTSPsolver.cc része egy STSPsolver nevű template osztály ami a következő módon működik
 - Az első template argument lehet Logging vagy Silent, ez dönti el, hogy a program írja a lépéseket egy "debug.log" fájlba, bármilyen beállítás esetén legfeljebb 1500 sort ír.
-- A második template argument azt határozza meg milyen módon álapítsa meg a alsó korlátokat, jelenleg csak az "SST" opció működőképes.
+- A második template argument azt határozza meg milyen módon álapítsa meg a alsó korlátokat.
 - A harmadik opció $\alpha$-közelítő módszer ami már akkor is levág, ha a feladhoz tartozó alsó becslés $\alpha$-szorosa nagyobb az aktuális felső becslésnél. Mivel nem minden C++ verzió támogat double template argumentet ez a funkció constexpr segítségével van implementálva, az STSP::approx(double a) függvényt kell használni a közelítő hányados megadására.
 - Az algoritmus argumentumként egyenlőre egy Lemon::Listtdigraph formátumú gráfot, rajta egy int tipusú 0, ... , n-1 csúcsindexelést egy nodemap fomrájában, és egy Arcmap<double> költségfüggvényt vár, opcionális egy kezdő felső korlát az optimumra (ha ez kissebb mint az optimum nem ad vissza megoldást).
 - Megtalál egy 0-ból induló Hamilton utat, ami az ilyenek közt a költségfüggvényre nézve minimális.
