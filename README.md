@@ -1,11 +1,22 @@
 # Thesis
 ## Todo
-- A solver osztály templatté alakítása, upper bound legyen élköltség összeg a std::limits szám helyett, a Label indexelésének ellenőrzése, helyetesítése
-- Ha nincs megoldás viselkedés
-- Warningok átnézése
-- Az éleket egy taskon iterálásban csökkenő sorrendben adjuk hozzá
-- Tesztelés
-  - A Rand.cc osztályba átszervezése
+- #### Működés
+  - A solver osztály templatté alakítása
+  - Label indexelésének ellenőrzése, helyetesítése
+  - Ha nincs megoldás viselkedés
+  - Nem csak 0 kezdetű utak?
+- #### Optimalizálás
+  - AP contractciós becslés
+  - Az éleket egy taskon (vagy az egész alatt) iterálásban csökkenő sorrendben adjuk hozzá.
+    - ehez kupacok?
+      - Operátorok a task struktúrába
+  - Upper bound legyen élköltség összeg (eközben gyüjthetünk más infot is) a std::limits szám helyett, vagy fusson le először egy közelítő verzió ami a korlátot generál, közben néhány maszkra alsó korlátot generál, potenciálisan iterált verzió?
+- #### Debug
+  - Warningok átnézése
+  - Esetleg néhány bound függvényhez Inline kulcsszó hozzáadása?
+- #### Tesztelés
+  - A Rand.cc osztályba szervezése
+  - Nagy teszt program írása
 <br>
 
 ## Fájlok
@@ -35,6 +46,7 @@ A Kódot mivel mellékhatás nélküli egyszerű részfeladatot lát el, egy ál
 A smallTSPsolver.cc része egy STSPsolver nevű template osztály ami a következő módon működik
 - Az első template argument lehet Logging vagy Silent, ez dönti el, hogy a program írja a lépéseket egy "debug.log" fájlba, bármilyen beállítás esetén legfeljebb 1500 sort ír.
 - A második template argument azt határozza meg milyen módon álapítsa meg a alsó korlátokat, jelenleg csak az "SST" opció működőképes.
+- A harmadik opció $\alpha$-közelítő módszer ami már akkor is levág, ha a feladhoz tartozó alsó becslés $\alpha$-szorosa nagyobb az aktuális felső becslésnél. Mivel nem minden C++ verzió támogat double template argumentet ez a funkció constexpr segítségével van implementálva, az STSP::approx(double a) függvényt kell használni a közelítő hányados megadására.
 - Az algoritmus argumentumként egyenlőre egy Lemon::Listtdigraph formátumú gráfot, rajta egy int tipusú 0, ... , n-1 csúcsindexelést egy nodemap fomrájában, és egy Arcmap<double> költségfüggvényt vár, opcionális egy kezdő felső korlát az optimumra (ha ez kissebb mint az optimum nem ad vissza megoldást).
 - Megtalál egy 0-ból induló Hamilton utat, ami az ilyenek közt a költségfüggvényre nézve minimális.
 
