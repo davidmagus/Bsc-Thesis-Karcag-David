@@ -1,4 +1,5 @@
 # Thesis
+Szakdolgozat Draft Link: https://www.overleaf.com/read/wfqyhfxcvzdc#ccac46
 ## Todo
 - #### Működés
   - A solver osztály templatté alakítása
