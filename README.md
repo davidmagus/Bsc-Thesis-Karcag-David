@@ -28,15 +28,18 @@ Szakdolgozat Draft Link: https://www.overleaf.com/read/wfqyhfxcvzdc#ccac46
 
 ## Random példa generálás
 A Sztandard inputról olvas be, három inputot:
-- A példa tipus, egyenlőre mindig "TSP"
+- A példa tipus, "TSPcomplete" vagy "TSPpartial"
 - Number of nodes (n): a generálandó gráf csúcsainak száma
 - Edge ratio (mratio): a random generált élek és a csúcsok számának hányadosa, ha nagyobb mind az összes lehetséges él száma akkor $${n}\choose{2}$$
-- Én az echo -e "TSP\n20\n10" | ./Rnd parancs paramétereinek modósításával szoktam futtatni
+- Én az echo -e "TSPcomplete\n20\n10" | ./Rnd parancs paramétereinek modósításával szoktam futtatni
 
 A generálás a következő módon zajlik:
 - Veszünk n random egész pontot a síkon ezeknek egy új gráfban megfeleltetünk n csúcsot. Elkezdünk hozzáadni élek egy él hossza mindig az euklédeszi távolság felső egész része.
-- Először Létrehozunk egy H - kört a gráfban, ez garantálja, az összefüggőséget, és, hogy legalább egy TSP megoldás létezzen
-- A maradék éleket random generáljuk (nem generálunk multi éleket, ekkor újra sorsolunk)
+- Partial esetében:
+  - Először Létrehozunk egy H - kört a gráfban, ez garantálja, az összefüggőséget, és, hogy legalább egy TSP megoldás létezzen
+  - A maradék éleket random generáljuk (nem generálunk multi éleket, ekkor újra sorsolunk)
+- Complete esetében:
+  - Kettős ciklus segítségével behúzzuk az összes élet  
 - A Lemon graphwriter eszközeivel elmentjük a példát egy "digraph_tsp.lgf" nevű fájlba.
 
 ### AI use
