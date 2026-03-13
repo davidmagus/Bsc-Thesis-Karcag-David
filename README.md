@@ -1,5 +1,8 @@
 # Thesis
 Szakdolgozat Draft Link: https://www.overleaf.com/read/wfqyhfxcvzdc#ccac46
+
+A programok némelyike hosszú bitsorozatok tárolására a boost csomagot használj
+sudo apt install libboost-all-dev
 ## Todo
 - #### Működés
   - A solver osztály templatté alakítása
