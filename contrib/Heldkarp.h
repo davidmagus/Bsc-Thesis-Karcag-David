@@ -49,7 +49,7 @@ namespace Heldkarp
     {
         std::ofstream logFile;
         int counter;
-        Logging() : logFile("HK.log") { counter = 10000; }
+        Logging() : logFile("HK.log") { counter = 15000; }
 
         template <typename... Args>
         void log(Args... args)
@@ -421,7 +421,7 @@ namespace Heldkarp
                     // Ha nincs még kész nézzük meg az alsó becslést, csináljuk meg
                     if (Done[Label[newnode]][newmask] == 0)
                     {
-                        new_X.LB = Bound(new_X) + weight[a];
+                        new_X.LB = Bound(new_X);
                         if (new_X.LB < Upper_bound)
                         {
                             tasks.push_back(new_X);
@@ -451,10 +451,20 @@ namespace Heldkarp
                 R_update();
                 for (size_t i = 0; i < tasks.size(); i++)
                 {
-                    if (R_val < Upper_bound)
+                    string rute = "";
+                    for (size_t i = 0; i < Route.size(); i++)
+                    {
+                        auto& a = Route[i];
+                        string arc = to_string(Label[G.source(a)]) + "->" + to_string(Label[G.target(a)]) + " ";
+                        rute += arc;
+                    }
+                    if (tasks[i].LB < Upper_bound)
                     {
                         logger.log("Added: ", tasks[i].finalize, " ", tasks[i].mask, " ", Label[tasks[i].node], " ", Label[G.source(tasks[i].arc)], "->", Label[G.target(tasks[i].arc)]);
                         tasklist.push_back(tasks[i]);
+                    }else{
+                    logger.log(rute, " ", tasks[i].mask, " ", Label[tasks[i].node], "val: ", R_val, "+", tasks[i].LB, "=", R_val + tasks[i].LB, ">=" ,Upper_bound);                    
+
                     }
                 }
             }
