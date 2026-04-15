@@ -23,12 +23,12 @@ using namespace lemon;
 #pragma region Bitmask extensions
 namespace Bit
 {
-    bool is(const boost::dynamic_bitset<> &bits, size_t i)
+    inline bool is(const boost::dynamic_bitset<> &bits, size_t i)
     {
         return (i < bits.size()) && bits[i];
     }
 
-    boost::dynamic_bitset<> AND(boost::dynamic_bitset<> a, boost::dynamic_bitset<> b)
+    inline boost::dynamic_bitset<> AND(boost::dynamic_bitset<> a, boost::dynamic_bitset<> b)
     {
         size_t max_size = std::max(a.size(), b.size());
 
@@ -40,7 +40,7 @@ namespace Bit
         return a & b;
     }
 
-    boost::dynamic_bitset<> OR(boost::dynamic_bitset<> a, boost::dynamic_bitset<> b)
+    inline boost::dynamic_bitset<> OR(boost::dynamic_bitset<> a, boost::dynamic_bitset<> b)
     {
         size_t max_size = std::max(a.size(), b.size());
         if (a.size() < max_size)
@@ -726,8 +726,11 @@ namespace BnCnP
 
         void printroute()
         {
-
-            cout << endl;
+            vector<ListDigraph::Arc> Tour = this->OPTroute();
+            for (size_t i = 0; i < Tour.size(); i++)
+            {
+                cout << "->" << Label[(G.target(Tour[i]))];
+            }
         }
 #pragma endregion
     };
