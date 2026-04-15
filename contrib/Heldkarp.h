@@ -23,6 +23,7 @@ using namespace lemon;
 
 namespace Heldkarp
 {
+
 #pragma region BnB tree node
     struct tree_node
     {
@@ -40,8 +41,6 @@ namespace Heldkarp
                                                   arc(_arc)
         {
         }
-
-        tree_node(double N) : LB() {}
     };
 #pragma endregion
 
@@ -50,7 +49,7 @@ namespace Heldkarp
     {
         std::ofstream logFile;
         int counter;
-        Logging() : logFile("debug.log") { counter = 1500; }
+        Logging() : logFile("HK.log") { counter = 10000; }
 
         template <typename... Args>
         void log(Args... args)
@@ -58,7 +57,7 @@ namespace Heldkarp
             if (counter)
             {
                 counter--;
-                (logFile << ... << args);
+                (logFile << ... << args) << endl;
             }
         }
     };
@@ -91,34 +90,67 @@ namespace Heldkarp
         vector<ListDigraph::Arc> Arcs; // Az élek egy rendezett listája
 
         // Eredmények
-        double Current_bestval = 0;
+        double Current_bestval = 1000000000;
         vector<ListDigraph::Arc> Route;
+        double R_val = 0;
+        void add(const ListDigraph::Arc &arc)
+        {
+            Route.push_back(arc);
+            R_val += weight[arc];
+            logger.log("                               Added: ", Label[G.source(arc)], "->", Label[G.target(arc)]);
+        }
+        void pop()
+        {
+            if (!Route.empty())
+            {
+                ListDigraph::Arc a = Route.back();
+                logger.log("                               Removed: ", Label[G.source(a)], "->", Label[G.target(a)]);
+                R_val -= weight[a];
+                Route.pop_back();
+            }
+            else
+            {
+                throw invalid_argument(" Popped when empty");
+            }
+        }
+        void R_update(){
+            double newval = 0.0;
+            for (ListDigraph::Arc a : Route)
+            {
+                newval += weight[a];
+            }
+            R_val = newval;
+        }
         vector<ListDigraph::Arc> Best_Route;
         int solved = 0; // A query függvények számára fentartott belső ellenörző 0 ha nem hívták még meg a .solve metódust, 1 egyébként.
 
         // DP
-        vector<SparseMap<boost::dynamic_bitset<>, double>> LB;                // Alsóbecslések szótára
-        vector<SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc>> NextArc; // Következő él
-        vector<SparseMap<boost::dynamic_bitset<>, double>> DP;                // Konkrét értékek szótára
+        vector<SparseMap<boost::dynamic_bitset<>, double>> LB;                // Alsó Becslések
+        vector<SparseMap<boost::dynamic_bitset<>, double>> Done;              // Alsó Becslések
+        vector<SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc>> NextArc; // Következő élek
+        vector<SparseMap<boost::dynamic_bitset<>, double>> DP;                // Egzakt értékek
+
+        // LowerBoundhoz feszítőfák
+        SparseMap<boost::dynamic_bitset<>, double> SST{0.0};
 
         // Branch and Bound fa
-        ListDigraph r;              // Held Karp féle gyökér
+        ListDigraph::Node r;        // Held Karp féle gyökér
         vector<tree_node> tasklist; // Listája a A részfeladatoknak amit még ki kell vizsgálni.
         DEBUG logger;               // A logoláshoz használt objektum
 
 #pragma endregion
 
 #pragma region Initialization
-        void init()
+        void init(ArcLookUp<ListDigraph> &lookUp)
         {
             // Élek rendezése
-            for (ListDigraph::ArcIt a(G); a != INVALID; a++)
+            for (ListDigraph::ArcIt a(G); a != INVALID; ++a)
             {
                 Arcs.push_back(a);
             }
 
             std::sort(Arcs.begin(), Arcs.end(),
-                      [&weight](const ListDigraph::Arc &a, const ListDigraph::Arc &b)
+                      [this](const ListDigraph::Arc &a, const ListDigraph::Arc &b)
                       {
                           return weight[a] < weight[b];
                       });
@@ -129,55 +161,99 @@ namespace Heldkarp
             if (Upper_bound > maxins.Length)
             {
                 Upper_bound = maxins.Length;
-                Route = maxins.Route;
+                Best_Route = maxins.Route;
             }
 
             Heuristic::Repetitive_Nearest_Neighbour RNN{G, Label, weight};
             if (Upper_bound > RNN.Length)
             {
                 Upper_bound = RNN.Length;
-                Route = RNN.Route;
+                Best_Route = RNN.Route;
             }
 
             // Tasklist Vector előkészítése
             tasklist.clear();
-            boost::dynamic_bitset<> H(n - 1);
+            boost::dynamic_bitset<> H(n);
             H.set();
+            H.reset(n - 1);
             for (ListDigraph::NodeIt v(G); v != INVALID; ++v)
             {
-                if (Label[v] = n - 1)
+                if (Label[v] == n - 1)
                 {
                     r = v;
+                    break;
+                }
+            }
+            for (ListDigraph::NodeIt v(G); v != INVALID; ++v)
+            {
+                if (Label[v] == n - 1)
+                {
                 }
                 else
                 {
-
-                    H.reset(Label[v]);
-                    tasklist.emplace_back(false, H, v);
+                    if (lookUp(v, r) != INVALID)
+                    {
+                        H.reset(Label[v]);
+                        tasklist.emplace_back(false, H, v, lookUp(v, r));
+                        logger.log("Added: ", tasklist.back().finalize, " ", tasklist.back().mask, " ", Label[tasklist.back().node], " ", Label[G.source(tasklist.back().arc)], "->", Label[G.target(tasklist.back().arc)]);
+                        H.set(Label[v]);
+                    }
                 }
             }
         }
 #pragma endregion
 
 #pragma region Route found
-        void Route_found(tree_node &X, tree_node &START)
+        void Route_found_(tree_node &X, tree_node &START)
         {
             if (G.source(Route.back()) != r)
             {
-                Route.push_back(NextArc[X.node][X.mask]);
+                add(NextArc[Label[X.node]][X.mask]);
+                logger.log("Iter on: ", X.mask, " ", Label[X.node], "\n", Label[G.source(NextArc[Label[X.node]][X.mask])], "->", Label[G.target(NextArc[Label[X.node]][X.mask])], "\n");
                 boost::dynamic_bitset<> newmask = X.mask;
-                newmask.reset(Label[G.source(NextArc[X.node][X.mask])]);
-                ListDigraph::Node newnode = G.source(NextArc[X.node][X.mask]);
-                tree_node new_X(false, newmask, newnode, NextArc[X.node][X.mask]);
+                newmask.reset(Label[G.source(NextArc[Label[X.node]][X.mask])]);
+                ListDigraph::Node newnode = G.source(NextArc[Label[X.node]][X.mask]);
+                tree_node new_X(false, newmask, newnode, NextArc[Label[X.node]][X.mask]);
 
-                Route_found(new_X, START);
+                Route_found_(new_X, START);
                 return;
             }
+            if (int(Route.size()) < n)
+            {
+                std::map<int, bool> Check;
+                logger.log("Too short route: ");
+                for (size_t i = 0; i < Route.size(); i++)
+                {
+                    logger.log(Label[G.source(Route[i])], "->", Label[G.target(Route[i])]);
+                    Check.insert({Label[G.source(Route[i])], true});
+                }
 
+                for (int i = 0; i < n; i++)
+                {
+                    if (Check.find(i) == Check.end())
+                    {
+                        logger.log(i, " is not inluded");
+                    }
+                }
+                throw invalid_argument("Route too short");
+            }
+
+            std::map<int, bool> Check;
+            bool error = false;
             double val = 0.0;
             for (size_t i = 0; i < Route.size(); i++)
             {
+                logger.log(Label[G.source(Route[i])], "->", Label[G.target(Route[i])], " ", val, "+", weight[Route[i]]);
+                if (Check.find(Label[G.source(Route[i])]) != Check.end())
+                {
+                    logger.log(Label[G.source(Route[i])], " is duplicate");
+                }
+                Check.insert({Label[G.source(Route[i])], true});
                 val += weight[Route[i]];
+            }
+            if (error)
+            {
+                throw invalid_argument("Not a route");
             }
 
             if (val < Upper_bound)
@@ -185,11 +261,14 @@ namespace Heldkarp
                 Upper_bound = val;
                 Best_Route = Route;
             }
-
-            while (START.arc != Route.back())
-            {
-                Route.pop_back();
-            }
+        }
+        void Route_found(tree_node &X, tree_node &START)
+        {
+            double tempv = R_val;
+            vector<ListDigraph::Arc> temp = Route;
+            Route_found_(X, START);
+            Route = temp;
+            R_val = tempv;
         }
 #pragma endregion
 
@@ -222,89 +301,92 @@ namespace Heldkarp
 
         double Bound(tree_node &X)
         {
+            if (!X.mask.any())
+            {
+                return 0;
+            }
+            double rout{Upper_bound + 1}, tin{Upper_bound + 1}, FH{0.0};
+            for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
+            {
+                if (X.mask[Label[G.source(a)]] && weight[a] < tin)
+                {
+                    tin = weight[a];
+                }
+            }
+
+            for (ListDigraph::OutArcIt a(G, r); a != INVALID; ++a)
+            {
+                if (X.mask[Label[G.target(a)]] && weight[a] < rout)
+                {
+                    rout = weight[a];
+                }
+            }
+
+            if (SST[X.mask] != 0)
+            {
+                return SST[X.mask] + rout + tin;
+            }
             DSU dsu{n};
             int edge_count = 0;
-            double rin{Upper_bound + 1}, rout{Upper_bound + 1}, tin{Upper_bound + 1}, FH{0}, FC{0};
             for (size_t i = 0; i < Arcs.size(); i++)
             {
                 ListDigraph::Arc &a = Arcs[i];
-
-                if (G.source(a) == r)
+                if (X.mask[Label[G.target(a)]] && X.mask[Label[G.source(a)]])
                 {
-                    if (X.mask[Label[G.target(a)]] && rout == Upper_bound + 1)
+                    if (dsu.find(Label[G.target(a)]) != dsu.find(Label[G.source(a)]))
                     {
-                        rout = weight[a];
-                    }
-                }
-                else if (G.target(a) == r)
-                {
-                    if (G.source(a) != X.node && !X.mask[Label[G.source(a)]] && rin == Upper_bound + 1)
-                    {
-                        rin = weight[a];
-                    }
-                }
-                else if (X.node == G.target(a))
-                {
-                    if (X.mask[Label[G.source(a)]] && tin == Upper_bound + 1)
-                    {
-                        tin = weight[a];
-                    }
-                }
-                else if (X.node != G.source(a))
-                {
-                    if (!X.mask[Label[G.target(a)]] && !X.mask[Label[G.source(a)]])
-                    {
-                        if (find(Label[G.target(a)]) != find(Label[G.source(a)]))
-                        {
-                            edge_count++;
-                            FC += weight[a];
-                            dsu.unite(Label[G.target(a)], Label[G.source(a)]);
-                        }
-                    }
-                    else if (X.mask[Label[G.target(a)]] && X.mask[Label[G.source(a)]])
-                    {
-                        if (find(Label[G.target(a)]) != find(Label[G.source(a)]))
-                        {
-                            edge_count++;
-                            FH += weight[a];
-                            dsu.unite(Label[G.target(a)], Label[G.source(a)]);
-                        }
+                        edge_count++;
+                        FH += weight[a];
+                        dsu.unite(Label[G.target(a)], Label[G.source(a)]);
                     }
                 }
             }
-            if (edge_count < n - 4)
+            if (edge_count < int(X.mask.count()) - 1)
             {
-                return Upper_bound + 1;
+                FH = Upper_bound + 1;
             }
-            return LB[X.node][X.mask] = rin + rout + tin + FH + FC;
+            SST[X.mask] = FH;
+            return LB[Label[X.node]][X.mask] = FH + rout + tin;
         }
 #pragma endregion
 
 #pragma region processnode
         void process(tree_node &X, ArcLookUp<ListDigraph> &lookUp)
         {
+            logger.log("Proccesing: ", X.mask, " ", Label[X.node], " Finalize: ", X.finalize, " Depth: ", Route.size());
+            // Ha befejezzük
             if (X.finalize)
             {
-                Route.pop_back();
+                logger.log("------------------------------------------");
+                pop();
                 double minval = Upper_bound + 1;
-                ListDigraph::Arc tempNextArc = a;
+                ListDigraph::Node tempNextNode;
                 ListDigraph::InArcIt a(G, X.node);
                 for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
                 {
                     X.mask.flip(Label[G.source(a)]);
-                    if (minval > DP[Label[G.source(a)]][X.mask])
+                    if (minval > DP[Label[G.source(a)]][X.mask] + weight[a])
                     {
-                        minval = DP[Label[G.source(a)]][X.mask];
-                        tempNextArc = NextArc[Label[G.source(a)]][X.mask];
+                        minval = DP[Label[G.source(a)]][X.mask] + weight[a];
+                        tempNextNode = G.source(a);
                     }
                     X.mask.flip(Label[G.source(a)]);
                 }
                 DP[Label[X.node]][X.mask] = LB[Label[X.node]][X.mask] = minval;
-                NextArc[Label[X.node]][X.mask] = tempNextArc;
+                if (minval < Upper_bound + 1)
+                {
+                    NextArc[Label[X.node]][X.mask] = lookUp(tempNextNode, X.node);
+                }
+                Done[Label[X.node]][X.mask] = 1;
             }
+            // Ha most kezdjük
             else
             {
-                Route.push_back(X.arc);
+                // if (weight[X.arc] + R_val >= Upper_bound)
+                // {
+                //     return;
+                // }
+                add(X.arc);
                 if (!X.mask.any())
                 {
                     if (lookUp(r, X.node) == INVALID)
@@ -312,31 +394,51 @@ namespace Heldkarp
                         DP[Label[X.node]][X.mask] = LB[Label[X.node]][X.mask] = Upper_bound + 1;
                         return;
                     }
-
-                    Route.push_back(lookUp(r, X.node));
+                    add(lookUp(r, X.node));
                     DP[Label[X.node]][X.mask] = LB[Label[X.node]][X.mask] = weight[lookUp(r, X.node)];
                     NextArc[Label[X.node]][X.mask] = lookUp(r, X.node);
-                    Route_found(X, X);
+                    Route_found(X, X); // Ha már minden csúcsot meglátogattunk
+                    pop();
+                    pop();
                     return;
                 }
                 vector<tree_node> tasks;
                 for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
                 {
+                    if (G.source(a) == r || !X.mask[Label[G.source(a)]])
+                    {
+                        continue;
+                    }
+
+                    // Új mask = H - source(a)
                     boost::dynamic_bitset<> newmask = X.mask;
                     newmask.reset(Label[G.source(a)]);
+
+                    // Új csúcs source(a)
                     ListDigraph::Node newnode = G.source(a);
                     tree_node new_X(false, newmask, newnode, a);
-                    if (LB[newnode][newmask] == 0)
+
+                    // Ha nincs még kész nézzük meg az alsó becslést, csináljuk meg
+                    if (Done[Label[newnode]][newmask] == 0)
                     {
-                        new_X.LB = bound(new_X) + weight[a];
+                        new_X.LB = Bound(new_X) + weight[a];
                         if (new_X.LB < Upper_bound)
                         {
                             tasks.push_back(new_X);
                         }
                     }
+
+                    // Ha kész van: vagy az arc INVALID azaz nincs jó út, vagy van egy utunk
                     else
                     {
-                        Route_found(X, X);
+
+                        if (NextArc[Label[newnode]][newmask] != INVALID && DP[Label[newnode]][newmask] + weight[a] + R_val < Upper_bound)
+                        {
+                            logger.log("Route end: ", newmask, " ", Label[newnode]);
+                            add(a);
+                            Route_found(new_X, new_X); // Ha van egy utunk, és kész van előtte minden
+                            pop();
+                        }
                     }
                 }
                 std::sort(tasks.begin(), tasks.end(), [](const tree_node &a, const tree_node &b)
@@ -344,11 +446,14 @@ namespace Heldkarp
                               return a.LB > b.LB; // Csökkenő sorrend
                           });
                 X.finalize = true;
+                logger.log("Added: ", X.finalize, " ", X.mask, " ", Label[X.node], " ", Label[G.source(X.arc)], "->", Label[G.target(X.arc)]);
                 tasklist.push_back(X);
+                R_update();
                 for (size_t i = 0; i < tasks.size(); i++)
                 {
-                    if (tasks[i].LB < Upper_bound)
+                    if (R_val < Upper_bound)
                     {
+                        logger.log("Added: ", tasks[i].finalize, " ", tasks[i].mask, " ", Label[tasks[i].node], " ", Label[G.source(tasks[i].arc)], "->", Label[G.target(tasks[i].arc)]);
                         tasklist.push_back(tasks[i]);
                     }
                 }
@@ -363,7 +468,7 @@ namespace Heldkarp
             const ListDigraph &_G,
             const ListDigraph::NodeMap<int> &_Label,
             const ListDigraph::ArcMap<double> &_weight,
-            const double _Upper_bound = std::numeric_limits<double>::max()) : G(_G), weight(_weight), Label(_Label), Upper_bound(_Upper_bound)
+            const double _Upper_bound = std::numeric_limits<double>::max()) : G(_G), Label(_Label), weight(_weight), Upper_bound(_Upper_bound)
         {
             n = countNodes(_G);
             V.resize(n);
@@ -374,26 +479,54 @@ namespace Heldkarp
             logger.log("Nodes: ", n, " Upperbound: ", Upper_bound, "\n");
 
             // 1. LB inicializálása, ha még nem számoltunk ki jobbat legyen 0
-            LB.assign(n - 1, SparseMap<boost::dynamic_bitset<>, double>(0.0));
+            for (int i = 0; i < n; i++)
+            {
+                SparseMap<boost::dynamic_bitset<>, double> lb{0.0};
+                LB.push_back(lb);
+            }
+
+            // 1.2. Done inicializálása, ha még nem számoltuk ki 0
+            for (int i = 0; i < n; i++)
+            {
+                SparseMap<boost::dynamic_bitset<>, double> dn{0.0};
+                Done.push_back(dn);
+            }
 
             // 2. NextArc inicializálása INVALID alapból
-            NextArc.assign(n - 1, SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc>(INVALID));
+            for (int i = 0; i < n; i++)
+            {
+                SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc> Arcs{INVALID};
+                NextArc.push_back(Arcs);
+            }
 
             // 3. Val inicializálása legyen alapból egy nagy szám
-            DP.assign(n - 1, SparseMap<boost::dynamic_bitset<>, double>(Upper_bound + 1));
+            for (int i = 0; i < n; i++)
+            {
+                SparseMap<boost::dynamic_bitset<>, double> vals{Upper_bound + 1};
+                DP.push_back(vals);
+            }
         };
 #pragma endregion
 
-#pragma region Query functions
+#pragma region solve()
         double solve()
         {
             lemon::ArcLookUp<ListDigraph> lookUp(G);
-            init();
-
+            init(lookUp);
+            logger.log("Root: ", Label[r]);
+            while (!tasklist.empty())
+            {
+                tree_node X = tasklist.back();
+                tasklist.pop_back();
+                process(X, lookUp);
+            }
             solved = 1;
+            Current_bestval = Upper_bound;
             return Current_bestval;
         }
 
+#pragma endregion
+#pragma region Query functions
         double OPTval()
         {
             if (!solved)
@@ -409,16 +542,16 @@ namespace Heldkarp
             {
                 throw std::invalid_argument("Most call method .solve() before using query functions");
             }
-            return Best_;
+            return Best_Route;
         }
 
         void printroute()
         {
-            for (int i = 1; i < Best_route.size(); i++)
+            vector<ListDigraph::Arc> Tour = this->OPTroute();
+            for (size_t i = 0; i < Tour.size(); i++)
             {
-                cout << " " << Best_route[i];
+                cout << "->" << Label[(G.target(Tour[i]))];
             }
-            cout << endl;
         }
 #pragma endregion
     };

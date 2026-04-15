@@ -1,0 +1,53 @@
+            int edge_count = 0;
+            double rin{Upper_bound + 1}, rout{Upper_bound + 1}, tin{Upper_bound + 1}, FH{0}, FC{0};
+            for (size_t i = 0; i < Arcs.size(); i++)
+            {
+                ListDigraph::Arc &a = Arcs[i];
+
+                if (G.source(a) == r)
+                {
+                    if (X.mask[Label[G.target(a)]] && rout == Upper_bound + 1)
+                    {
+                        rout = weight[a];
+                    }
+                }
+                else if (G.target(a) == r)
+                {
+                    if (G.source(a) != X.node && !X.mask[Label[G.source(a)]] && rin == Upper_bound + 1)
+                    {
+                        rin = weight[a];
+                    }
+                }
+                else if (X.node == G.target(a))
+                {
+                    if (X.mask[Label[G.source(a)]] && tin == Upper_bound + 1)
+                    {
+                        tin = weight[a];
+                    }
+                }
+                else if (X.node != G.source(a))
+                {
+                    if (!X.mask[Label[G.target(a)]] && !X.mask[Label[G.source(a)]])
+                    {
+                        if (dsu.find(Label[G.target(a)]) != dsu.find(Label[G.source(a)]))
+                        {
+                            edge_count++;
+                            FC += weight[a];
+                            dsu.unite(Label[G.target(a)], Label[G.source(a)]);
+                        }
+                    }
+                    else if (X.mask[Label[G.target(a)]] && X.mask[Label[G.source(a)]])
+                    {
+                        if (dsu.find(Label[G.target(a)]) != dsu.find(Label[G.source(a)]))
+                        {
+                            edge_count++;
+                            FH += weight[a];
+                            dsu.unite(Label[G.target(a)], Label[G.source(a)]);
+                        }
+                    }
+                }
+            }
+            if (edge_count < n - 4)
+            {
+                return Upper_bound + 1;
+            }
