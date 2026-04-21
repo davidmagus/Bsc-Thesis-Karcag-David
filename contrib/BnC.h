@@ -13,13 +13,14 @@
 #include <lemon/lp.h>
 #include <type_traits>
 #include <list>
+#include <unordered_set>
 #include <lemon/preflow.h>
 #include <lemon/adaptors.h>
 #include "Heuristic.h"
 using namespace std;
 using namespace lemon;
 #pragma endregion
-
+const size_t bitmask_maxsize = 100;
 #pragma region Bitmask extensions
 namespace Bit
 {
@@ -78,7 +79,7 @@ namespace BnCnP
     {
         Silent() {}
         template <typename... Args>
-        void log(Args... args)
+        void log(Args...)
         {
         }
     };
@@ -287,7 +288,6 @@ namespace BnCnP
                 addcol(a);
             }
             Best_Val = CL.Length;
-            cout << Best_Val;
             Best_Tour = CL.Route;
             logger.log("Closest Neighbour Value: ", Best_Val);
             logger.log("\nShortest Arcs: ");
@@ -399,20 +399,19 @@ namespace BnCnP
                 primalsol[a.first] = coreLP.primal(a.second);
             }
 
-            vector<boost::dynamic_bitset<>> cuts;
+            std::unordered_set<boost::dynamic_bitset<>> cuts;
 
             ListDigraph::NodeIt k(G);
 
             ListDigraph::Node s = k;
 
             ++k;
-
+            typedef FilterArcs<const ListDigraph, ListDigraph::ArcMap<bool>> FilteredGraph;
+            typedef ListDigraph::ArcMap<double> CapacityMap;
+            Preflow<FilteredGraph, CapacityMap> st(Flowgraph, primalsol, s, static_cast<ListDigraph::Node>(k));
             while (k != INVALID)
             {
-
-                typedef FilterArcs<const ListDigraph, ListDigraph::ArcMap<bool>> FilteredGraph;
-                typedef ListDigraph::ArcMap<double> CapacityMap;
-                Preflow<FilteredGraph, CapacityMap> st(Flowgraph, primalsol, s, static_cast<ListDigraph::Node>(k));
+                st.target(static_cast<ListDigraph::Node>(k));
                 st.runMinCut();
 
                 if (st.flowValue() < 1)
@@ -425,18 +424,9 @@ namespace BnCnP
                             temp.set(Label[v]);
                         }
                     }
-                    bool added = false;
-                    for (boost::dynamic_bitset<> i : cuts)
+                    if (cuts.find(temp) == cuts.end())
                     {
-                        if (temp == i)
-                        {
-                            added = true;
-                            break;
-                        }
-                    }
-                    if (!added)
-                    {
-                        cuts.push_back(temp);
+                        cuts.insert(temp);
                     }
                 }
                 ++k;

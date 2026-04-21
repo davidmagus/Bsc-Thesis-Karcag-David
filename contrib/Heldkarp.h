@@ -28,12 +28,12 @@ namespace Heldkarp
     struct tree_node
     {
         bool finalize;
-        boost::dynamic_bitset<> mask;
+        uint64_t mask;
         ListDigraph::Node node;
         ListDigraph::Arc arc;
         double LB;
         tree_node(const bool _finalize,
-                  boost::dynamic_bitset<> &_mask,
+                  uint64_t &_mask,
                   const ListDigraph::Node &_node,
                   const ListDigraph::Arc &_arc) : finalize(_finalize),
                                                   mask(_mask),
@@ -61,15 +61,14 @@ namespace Heldkarp
             }
         }
     };
-    struct Silent
+struct Silent
+{
+    Silent() {}
+    template <typename... Args>
+    void log(Args...)
     {
-        Silent() {}
-        template <typename... Args>
-        void log(Args... args)
-        {
-        }
-    };
-
+    }
+};
 #pragma endregion
 
     template <typename DEBUG = Silent> // Template parameters: <DEBUG = Heldkarp::Silent / Heldkarp::Logging, LB = bound::BF / bound::AP / bound::SST, alpha_approx = Heldkarp::approx(double Alpha)> parameters: const ListDigraph& _G, const ListDigraph::NodeMap<int>& _Label, const ListDigraph::ArcMap<double>& _weight, const double _Upper_bound
@@ -113,7 +112,8 @@ namespace Heldkarp
                 throw invalid_argument(" Popped when empty");
             }
         }
-        void R_update(){
+        void R_update()
+        {
             double newval = 0.0;
             for (ListDigraph::Arc a : Route)
             {
@@ -122,18 +122,17 @@ namespace Heldkarp
             R_val = newval;
         }
 
-        
         vector<ListDigraph::Arc> Best_Route;
         int solved = 0; // A query függvények számára fentartott belső ellenörző 0 ha nem hívták még meg a .solve metódust, 1 egyébként.
 
         // DP
-        vector<SparseMap<boost::dynamic_bitset<>, double>> LB;                // Alsó Becslések
-        vector<SparseMap<boost::dynamic_bitset<>, double>> Done;              // Alsó Becslések
-        vector<SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc>> NextArc; // Következő élek
-        vector<SparseMap<boost::dynamic_bitset<>, double>> DP;                // Egzakt értékek
+        vector<SparseMap<uint64_t, double>> LB;                // Alsó Becslések
+        vector<SparseMap<uint64_t, double>> Done;              // Alsó Becslések
+        vector<SparseMap<uint64_t, ListDigraph::Arc>> NextArc; // Következő élek
+        vector<SparseMap<uint64_t, double>> DP;                // Egzakt értékek
 
         // LowerBoundhoz feszítőfák
-        SparseMap<boost::dynamic_bitset<>, double> SST{0.0};
+        SparseMap<uint64_t, double> SST{0.0};
 
         // Branch and Bound fa
         ListDigraph::Node r;        // Held Karp féle gyökér
@@ -175,9 +174,7 @@ namespace Heldkarp
 
             // Tasklist Vector előkészítése
             tasklist.clear();
-            boost::dynamic_bitset<> H(n);
-            H.set();
-            H.reset(n - 1);
+            uint64_t H = (1ULL << (n - 2)) - 1;
             for (ListDigraph::NodeIt v(G); v != INVALID; ++v)
             {
                 if (Label[v] == n - 1)
@@ -195,10 +192,10 @@ namespace Heldkarp
                 {
                     if (lookUp(v, r) != INVALID)
                     {
-                        H.reset(Label[v]);
+                        H &= ~(1ULL << Label[v]);
                         tasklist.emplace_back(false, H, v, lookUp(v, r));
                         logger.log("Added: ", tasklist.back().finalize, " ", tasklist.back().mask, " ", Label[tasklist.back().node], " ", Label[G.source(tasklist.back().arc)], "->", Label[G.target(tasklist.back().arc)]);
-                        H.set(Label[v]);
+                        H |= (1ULL << Label[v]);
                     }
                 }
             }
@@ -212,8 +209,8 @@ namespace Heldkarp
             {
                 add(NextArc[Label[X.node]][X.mask]);
                 logger.log("Iter on: ", X.mask, " ", Label[X.node], "\n", Label[G.source(NextArc[Label[X.node]][X.mask])], "->", Label[G.target(NextArc[Label[X.node]][X.mask])], "\n");
-                boost::dynamic_bitset<> newmask = X.mask;
-                newmask.reset(Label[G.source(NextArc[Label[X.node]][X.mask])]);
+                uint64_t newmask = X.mask;
+                newmask &= ~(1ULL << Label[G.source(NextArc[Label[X.node]][X.mask])]);
                 ListDigraph::Node newnode = G.source(NextArc[Label[X.node]][X.mask]);
                 tree_node new_X(false, newmask, newnode, NextArc[Label[X.node]][X.mask]);
 
@@ -303,14 +300,14 @@ namespace Heldkarp
 
         double Bound(tree_node &X)
         {
-            if (!X.mask.any())
+            if (!X.mask)
             {
                 return 0;
             }
             double rout{Upper_bound + 1}, tin{Upper_bound + 1}, FH{0.0};
             for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
             {
-                if (X.mask[Label[G.source(a)]] && weight[a] < tin)
+                if ((X.mask & (1ULL << Label[G.source(a)])) && weight[a] < tin)
                 {
                     tin = weight[a];
                 }
@@ -318,7 +315,7 @@ namespace Heldkarp
 
             for (ListDigraph::OutArcIt a(G, r); a != INVALID; ++a)
             {
-                if (X.mask[Label[G.target(a)]] && weight[a] < rout)
+                if ((X.mask & (1ULL << Label[G.target(a)])) && weight[a] < rout)
                 {
                     rout = weight[a];
                 }
@@ -333,7 +330,7 @@ namespace Heldkarp
             for (size_t i = 0; i < Arcs.size(); i++)
             {
                 ListDigraph::Arc &a = Arcs[i];
-                if (X.mask[Label[G.target(a)]] && X.mask[Label[G.source(a)]])
+                if ( (X.mask & (1ULL << Label[G.target(a)])) && (X.mask & (1ULL << Label[G.source(a)])))
                 {
                     if (dsu.find(Label[G.target(a)]) != dsu.find(Label[G.source(a)]))
                     {
@@ -343,7 +340,7 @@ namespace Heldkarp
                     }
                 }
             }
-            if (edge_count < int(X.mask.count()) - 1)
+            if (edge_count < int(__builtin_popcountll(X.mask)) - 1)
             {
                 FH = Upper_bound + 1;
             }
@@ -366,13 +363,13 @@ namespace Heldkarp
                 ListDigraph::InArcIt a(G, X.node);
                 for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
                 {
-                    X.mask.flip(Label[G.source(a)]);
+                    X.mask ^= (1ULL << Label[G.source(a)]);
                     if (minval > DP[Label[G.source(a)]][X.mask] + weight[a])
                     {
                         minval = DP[Label[G.source(a)]][X.mask] + weight[a];
                         tempNextNode = G.source(a);
                     }
-                    X.mask.flip(Label[G.source(a)]);
+                    X.mask ^= (1ULL << Label[G.source(a)]);
                 }
                 DP[Label[X.node]][X.mask] = LB[Label[X.node]][X.mask] = minval;
                 if (minval < Upper_bound + 1)
@@ -389,7 +386,7 @@ namespace Heldkarp
                 //     return;
                 // }
                 add(X.arc);
-                if (!X.mask.any())
+                if (!X.mask)
                 {
                     if (lookUp(r, X.node) == INVALID)
                     {
@@ -407,14 +404,14 @@ namespace Heldkarp
                 vector<tree_node> tasks;
                 for (ListDigraph::InArcIt a(G, X.node); a != INVALID; ++a)
                 {
-                    if (G.source(a) == r || !X.mask[Label[G.source(a)]])
+                    if (G.source(a) == r || !(X.mask & (1ULL << Label[G.source(a)])))
                     {
                         continue;
                     }
 
                     // Új mask = H - source(a)
-                    boost::dynamic_bitset<> newmask = X.mask;
-                    newmask.reset(Label[G.source(a)]);
+                    uint64_t newmask = X.mask;
+                    newmask &= ~(1ULL << Label[G.source(a)]);
 
                     // Új csúcs source(a)
                     ListDigraph::Node newnode = G.source(a);
@@ -456,7 +453,7 @@ namespace Heldkarp
                     string rute = "";
                     for (size_t i = 0; i < Route.size(); i++)
                     {
-                        auto& a = Route[i];
+                        auto &a = Route[i];
                         string arc = to_string(Label[G.source(a)]) + "->" + to_string(Label[G.target(a)]) + " ";
                         rute += arc;
                     }
@@ -464,9 +461,10 @@ namespace Heldkarp
                     {
                         logger.log("Added: ", tasks[i].finalize, " ", tasks[i].mask, " ", Label[tasks[i].node], " ", Label[G.source(tasks[i].arc)], "->", Label[G.target(tasks[i].arc)]);
                         tasklist.push_back(tasks[i]);
-                    }else{
-                    logger.log(rute, " ", tasks[i].mask, " ", Label[tasks[i].node], "val: ", R_val, "+", tasks[i].LB, "=", R_val + tasks[i].LB, ">=" ,Upper_bound);                    
-
+                    }
+                    else
+                    {
+                        logger.log(rute, " ", tasks[i].mask, " ", Label[tasks[i].node], "val: ", R_val, "+", tasks[i].LB, "=", R_val + tasks[i].LB, ">=", Upper_bound);
                     }
                 }
             }
@@ -493,28 +491,28 @@ namespace Heldkarp
             // 1. LB inicializálása, ha még nem számoltunk ki jobbat legyen 0
             for (int i = 0; i < n; i++)
             {
-                SparseMap<boost::dynamic_bitset<>, double> lb{0.0};
+                SparseMap<uint64_t, double> lb{0.0};
                 LB.push_back(lb);
             }
 
             // 1.2. Done inicializálása, ha még nem számoltuk ki 0
             for (int i = 0; i < n; i++)
             {
-                SparseMap<boost::dynamic_bitset<>, double> dn{0.0};
+                SparseMap<uint64_t, double> dn{0.0};
                 Done.push_back(dn);
             }
 
             // 2. NextArc inicializálása INVALID alapból
             for (int i = 0; i < n; i++)
             {
-                SparseMap<boost::dynamic_bitset<>, ListDigraph::Arc> Arcs{INVALID};
+                SparseMap<uint64_t, ListDigraph::Arc> Arcs{INVALID};
                 NextArc.push_back(Arcs);
             }
 
             // 3. Val inicializálása legyen alapból egy nagy szám
             for (int i = 0; i < n; i++)
             {
-                SparseMap<boost::dynamic_bitset<>, double> vals{Upper_bound + 1};
+                SparseMap<uint64_t, double> vals{Upper_bound + 1};
                 DP.push_back(vals);
             }
         };

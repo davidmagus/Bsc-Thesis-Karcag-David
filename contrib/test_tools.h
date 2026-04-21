@@ -146,7 +146,7 @@ struct entry
 
     inline std::vector<entry> Results;
 
-    inline int one_run(int num, int seed = 0, vector<string> what_to_do = {"BnC", "Heu", "HK"}, bool noisy = true)
+    inline int one_run(int num, int seed = 0, vector<string> what_to_do = {"BnC"}, bool noisy = true)
     {
         Timer timer;
 #pragma region Generating Examples
@@ -304,7 +304,7 @@ struct entry
             {
                 timer.restart();
                 std::cout << "\nBranch and Cut and Price..." << "\n";
-                BnCnP::Algorithm<BnCnP::Logging> ALG(G, Label, weight);
+                BnCnP::Algorithm<BnCnP::Silent> ALG(G, Label, weight);
                 Results.back().BnC_val = ALG.solve();
                 Results.back().BnC_Time = timer.realTime();
                 Results.back().BnC_solved = ALG.get_OPTsolved();
@@ -342,7 +342,7 @@ struct entry
 
                 std::cout << "\nHeld-Karp SST..." << endl;
                 // // timer.restart();
-                Heldkarp::Heldkarp<Heldkarp::Logging> HK(G, Label, weight);
+                Heldkarp::Heldkarp<Heldkarp::Silent> HK(G, Label, weight);
                 std::cout << "Opt value: " << HK.solve() << " Best route: ";
                 if(noisy){ HK.printroute();}
                 cout << endl << endl;

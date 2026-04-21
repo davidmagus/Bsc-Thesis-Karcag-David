@@ -34,7 +34,7 @@ double get_average(const std::vector<entry> &Results, T entry::*field)
 int main(int argc, char *argv[])
 {
     bool noisy = false;
-    vector<string> what_to_do = {"BnC", "Heu"};
+    vector<string> what_to_do = {"BnC"};
     std::vector<int> runs;
 
     for (int i = 1; i < argc; i++)
