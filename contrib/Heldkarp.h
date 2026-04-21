@@ -121,6 +121,8 @@ namespace Heldkarp
             }
             R_val = newval;
         }
+
+        
         vector<ListDigraph::Arc> Best_Route;
         int solved = 0; // A query függvények számára fentartott belső ellenörző 0 ha nem hívták még meg a .solve metódust, 1 egyébként.
 
@@ -422,7 +424,7 @@ namespace Heldkarp
                     if (Done[Label[newnode]][newmask] == 0)
                     {
                         new_X.LB = Bound(new_X);
-                        if (new_X.LB < Upper_bound)
+                        if (new_X.LB + weight[a] < Upper_bound)
                         {
                             tasks.push_back(new_X);
                         }
@@ -458,7 +460,7 @@ namespace Heldkarp
                         string arc = to_string(Label[G.source(a)]) + "->" + to_string(Label[G.target(a)]) + " ";
                         rute += arc;
                     }
-                    if (tasks[i].LB < Upper_bound)
+                    if (tasks[i].LB + weight[tasks[i].arc] < Upper_bound)
                     {
                         logger.log("Added: ", tasks[i].finalize, " ", tasks[i].mask, " ", Label[tasks[i].node], " ", Label[G.source(tasks[i].arc)], "->", Label[G.target(tasks[i].arc)]);
                         tasklist.push_back(tasks[i]);

@@ -280,12 +280,14 @@ namespace BnCnP
         {
             logger.log("\nIntialization...");
             logger.log("\nClosest Neighbour Arcs: ");
-            Heuristic::Nearest_Neighbour CL{G, Label, weight};
+            Heuristic::Max_insert CL{G, Label, weight};
+            CL.Run();
             for (ListDigraph::Arc a : CL.Route)
             {
                 addcol(a);
             }
             Best_Val = CL.Length;
+            cout << Best_Val;
             Best_Tour = CL.Route;
             logger.log("Closest Neighbour Value: ", Best_Val);
             logger.log("\nShortest Arcs: ");
@@ -527,7 +529,7 @@ namespace BnCnP
             // Now we can Compute a Lowerbound
             coreLP.solve();
             X.LB = coreLP.primal();
-            if (!(X.LB < Best_Val)) // Cutting step
+            if (!(X.LB <= Best_Val)) // Cutting step
             {
                 return;
             }
@@ -644,7 +646,7 @@ namespace BnCnP
         void Tourfound()
         {
             logger.log("A new Tour found with value: ", coreLP.primal());
-            if (coreLP.primal() >= Best_Val)
+            if (coreLP.primal() > Best_Val)
             {
                 return;
             }
