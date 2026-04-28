@@ -1,9 +1,7 @@
 #ifndef Heuristic_H
 #define Heuristic_H
-#include <iostream>
 #include <lemon/list_graph.h>
 #include <lemon/lgf_reader.h>
-#include <lemon/maps.h>
 using namespace std;
 using namespace lemon;
 

@@ -117,8 +117,8 @@ namespace RandTSP
         vector<Point> coords(n);
         for (int i = 0; i < n; ++i)
         {
-            coords[i].x = get_next_random(0, 100);
-            coords[i].y = get_next_random(0, 100);
+            coords[i].x = get_next_random(0, 1000);
+            coords[i].y = get_next_random(0, 1000);
         }
 
         ListDigraph G;

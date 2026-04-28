@@ -7,11 +7,9 @@
 #include <boost/dynamic_bitset.hpp>
 #include <algorithm>
 #include <lemon/list_graph.h>
-#include <lemon/lgf_reader.h>
 #include <lemon/time_measure.h>
 #include <stdexcept>
 #include <lemon/lp.h>
-#include <type_traits>
 #include <list>
 #include <unordered_set>
 #include <lemon/preflow.h>
@@ -20,8 +18,8 @@
 using namespace std;
 using namespace lemon;
 #pragma endregion
-const size_t bitmask_maxsize = 100;
-#pragma region Bitmask extensions
+constexpr size_t bitmask_maxsize = 100;
+#pragma region Bitmask_extensions
 namespace Bit
 {
     inline bool is(const boost::dynamic_bitset<> &bits, size_t i)
@@ -62,7 +60,7 @@ namespace BnCnP
     {
         std::ofstream logFile;
         int counter;
-        Logging() : logFile("BnC.log") { counter = 1500; }
+        Logging() : logFile("analysis/Logs/BnC.log") { counter = 1500; }
 
         template <typename... Args>
         void log(Args... args)
@@ -79,18 +77,23 @@ namespace BnCnP
     {
         Silent() {}
         template <typename... Args>
-        void log(Args...)
+        static void log(Args...)
         {
         }
     };
 
 #pragma endregion
+    // Branching schemes:
+    //  1: original
+    //  2: take a node whole node set it to 0 or 1
+    //  3: take a node close enough to 0.5
+    //  4: Split the Inarcs into 2 groups equal in size containing a similar number of highly used arcs
 
-    template <typename DEBUG = Silent> // Template parameters: <DEBUG = STSP::Silent / STSP::Logging
+    template <typename DEBUG = Silent, int BRANCHING = 1> // Template parameters: <DEBUG = STSP::Silent / STSP::Logging
     class Algorithm
     {
     private:
-#pragma region Member variables
+#pragma region Member_variables
         // Kapott adatok
         int n;
         const ListDigraph &G;
@@ -111,10 +114,10 @@ namespace BnCnP
         list<ListDigraph::Arc> Arcs_notincluded;
 
         // Paraméterek
-        const int col_add_number;
         const int sepequality_add_number;
+        const int col_add_number;
         const int exploring_steps;
-        const size_t initarcs;
+        size_t initarcs;
         const double timeout;
 
         // Branch and cut Eszközök
@@ -135,8 +138,8 @@ namespace BnCnP
             node_BnCnPtree(
                 Algorithm &O,
                 const int _Pid,                              // ID of the Parent Task
-                const boost::dynamic_bitset<> edges_setto_0, // Edges for which the value is fixed to 1
-                const boost::dynamic_bitset<> edges_setto_1, // Edges for which the value is fixed to 0
+                const boost::dynamic_bitset<>& edges_setto_0, // Edges for which the value is fixed to 1
+                const boost::dynamic_bitset<>& edges_setto_1, // Edges for which the value is fixed to 0
                 const double LB,                             // Lower Bound
                 const int _ID                                // ID
                 ) : Parent_ID(_Pid),
@@ -166,7 +169,7 @@ namespace BnCnP
                     addcol(O, e);
                 }
             }
-            void addcol(Algorithm &O, std::pair<ListDigraph::Arc, Lp::Col> e)
+            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc,const Lp::Col>& e)
             {
                 switch (direction)
                 {
@@ -183,9 +186,11 @@ namespace BnCnP
                         O.coreLP.coeff(eq, e.second, 1);
                     }
                     break;
+                default: throw std::runtime_error("Unknown direction");
                 }
+
             }
-            int coeff(Algorithm &O, ListDigraph::Arc &a)
+            int coeff(const Algorithm &O, const ListDigraph::Arc &a)
             {
                 switch (direction)
                 {
@@ -194,22 +199,20 @@ namespace BnCnP
                     {
                         return 1;
                     }
-                    else
-                    {
-                        return 0;
-                    }
+                    return 0;
                     break;
 
                 case 0:
-                    if (O.G.source(a) == v)
                     {
-                        return 1;
-                    }
-                    else
-                    {
+                        if (O.G.source(a) == v)
+                        {
+                            return 1;
+                        }
                         return 0;
                     }
                     break;
+                    default:
+                    throw std::runtime_error("Unknown direction");
                 }
                 return 0;
             }
@@ -219,7 +222,7 @@ namespace BnCnP
         {
             boost::dynamic_bitset<> inside;
             Lp::Row eq;
-            separation_ineq(Algorithm &O, boost::dynamic_bitset<> &_inside) : inside(_inside)
+            separation_ineq(Algorithm &O, const boost::dynamic_bitset<> &_inside) : inside(_inside)
             {
                 eq = O.coreLP.addRow(0, 0, inside.count() - 1);
                 for (std::pair<ListDigraph::Arc, Lp::Col> e : O.Columns)
@@ -229,14 +232,14 @@ namespace BnCnP
 
                 O.logger.log("Separation equation added for: ", inside);
             }
-            void addcol(Algorithm &O, std::pair<ListDigraph::Arc, Lp::Col> e)
+            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc, Lp::Col>& e)
             {
                 if (inside[O.Label[O.G.target(e.first)]] && inside[O.Label[O.G.source(e.first)]])
                 {
                     O.coreLP.coeff(eq, e.second, 1);
                 }
             }
-            int coeff(Algorithm &O, ListDigraph::Arc &a)
+            int coeff(const Algorithm &O, const ListDigraph::Arc &a)
             {
                 if (inside[O.Label[O.G.target(a)]] && inside[O.Label[O.G.source(a)]])
                 {
@@ -358,33 +361,59 @@ namespace BnCnP
         }
 
 #pragma endregion
-#pragma region Colum generation
-        void Pricing()
+#pragma region Pricing
+        bool Pricing() // A bool értéke azt jelzi kell-e a tovább folytatni az oszlopgenerálást, ha true akkor igen
         {
-            int counter = 0;
-            for (ListDigraph::Arc a : Arcs_notincluded)
-            {
+            struct ActiveConstraint {
+                double dual_val;
+                void* ptr;
+                enum Type { DEG, SEP } type;
+            };
+            int counter{0};
+            std::vector<ActiveConstraint> active_constraints;
+            active_constraints.reserve(deg_eqs.size() + sep_ineqs.size());
+
+            for (auto& i : deg_eqs) {
+                double d = coreLP.dual(i.eq);
+                if (d > 0) {
+                    active_constraints.push_back({d, static_cast<void*>(&i), ActiveConstraint::DEG});
+                }
+            }
+            for (auto& i : sep_ineqs) {
+                double d = coreLP.dual(i.eq);
+                if (d > 0) {
+                    active_constraints.push_back({d, static_cast<void*>(&i), ActiveConstraint::SEP});
+                }
+            }
+
+            for (ListDigraph::Arc a : Arcs_notincluded) {
                 double Dualcost = -weight[a];
-                for (degree_eq i : deg_eqs)
-                {
-                    Dualcost += coreLP.dual(i.eq) * i.coeff(*this, a);
+
+                for (const auto& constr : active_constraints) {
+                    if (constr.type == ActiveConstraint::DEG) {
+                        auto* p = static_cast<degree_eq*>(constr.ptr);
+                        Dualcost += constr.dual_val * p->coeff(*this, a);
+                    } else {
+                        auto* p = static_cast<separation_ineq*>(constr.ptr);
+                        Dualcost += constr.dual_val * p->coeff(*this, a);
+                    }
                 }
-                for (separation_ineq i : sep_ineqs)
-                {
-                    Dualcost += coreLP.dual(i.eq) * i.coeff(*this, a);
-                }
-                if (Dualcost >= 0)
-                {
+
+                if (Dualcost >= 0) {
                     counter++;
-                    addcol(a);
-                }
-                if (col_add_number && counter >= col_add_number)
-                {
-                    break;
+                    if (counter <= col_add_number)
+                    {
+                        addcol(a);
+                    }
                 }
             }
             Arcs_notincluded.remove_if([&](const ListDigraph::Arc &a)
                                        { return IsCol[a]; });
+            if (counter == 0)
+            {
+            return false;  //Nem találtunk sértő oszlopot azaz a jelenlegi megoldás optimális.
+            }
+            return true;   //Ha találtunk akár 1-et is akkor tovább kell iterálni.
         }
 #pragma endregion
 
@@ -445,45 +474,148 @@ namespace BnCnP
         void Branch(size_t i, node_BnCnPtree &X)
         {
             ListDigraph::Node t = G.target(Columns[i].first);
-
-            vector<size_t> Candidate_arcs;
-            vector<size_t> Unused_tarcs;
-            for (size_t j = 0; j < Columns.size(); j++)
+            if constexpr (BRANCHING == 1)
             {
-                if (G.target(Columns[j].first) == t)
+                vector<size_t> Candidate_arcs;
+                vector<size_t> Unused_tarcs;
+                for (size_t j = 0; j < Columns.size(); j++)
                 {
-                    if (coreLP.primal(Columns[j].second) > 0.3)
+                    if (X.Edges_setto_0[j] || X.Edges_setto_1[j])
                     {
-                        Candidate_arcs.push_back(j);
+                        continue;
                     }
-                    else
+                    if (G.target(Columns[j].first) == t)
                     {
-                        Unused_tarcs.push_back(j);
+                        if (coreLP.primal(Columns[j].second) > 0.3)
+                        {
+                            Candidate_arcs.push_back(j);
+                        }
+                        else
+                        {
+                            Unused_tarcs.push_back(j);
+                        }
                     }
                 }
-            }
-            boost::dynamic_bitset<> new0s = X.Edges_setto_0;
-            boost::dynamic_bitset<> new1s = X.Edges_setto_1;
-            new0s.resize(Columns.size());
-            new1s.resize(Columns.size());
+                boost::dynamic_bitset<> new0s = X.Edges_setto_0;
+                boost::dynamic_bitset<> new1s = X.Edges_setto_1;
+                new0s.resize(Columns.size());
+                new1s.resize(Columns.size());
 
-            for (size_t k : Candidate_arcs)
-            {
-                new0s.set(k);
-            }
-            nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0.
-            for (size_t k : Unused_tarcs)
-            {
-                new0s.set(k);
-            }
+                for (size_t k : Candidate_arcs)
+                {
+                    new0s.set(k);
+                }
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0.
+                for (size_t k : Unused_tarcs)
+                {
+                    new0s.set(k);
+                }
 
-            for (size_t i : Candidate_arcs) // Where a Single high value arc is set to 1, and all others to 0.
+                for (size_t j : Candidate_arcs) // Where a Single high value arc is set to 1, and all others to 0.
+                {
+                    new1s.set(j);
+                    new0s.reset(j);
+                    nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+                    new1s.reset(j);
+                    new0s.set(j);
+                }
+            }
+            else if constexpr (BRANCHING == 2)
             {
+                boost::dynamic_bitset<> new0s = X.Edges_setto_0;
+                boost::dynamic_bitset<> new1s = X.Edges_setto_1;
                 new1s.set(i);
-                new0s.reset(i);
                 nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
                 new1s.reset(i);
                 new0s.set(i);
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+            }
+            else if constexpr (BRANCHING == 3)
+            {
+                int j = i;
+                for (; i < Columns.size(); i++)
+                {
+                    if (std::abs(coreLP.primal(Columns[i].second) - 0.5) < 1)
+                    {
+                        break;
+                    }
+                }
+
+                if (i == Columns.size())
+                {
+                    i = j;
+                }
+                boost::dynamic_bitset<> new0s = X.Edges_setto_0;
+                boost::dynamic_bitset<> new1s = X.Edges_setto_1;
+                new1s.set(i);
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+                new1s.reset(i);
+                new0s.set(i);
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+            }
+            else if constexpr (BRANCHING == 4)
+            {
+                vector<size_t> S_1;
+                vector<size_t> S_2;
+                int S_1_used = 0;
+                int S_1_unused = 0;
+                int S_2_used = 0;
+                int S_2_unused = 0;
+                for (size_t j = 0; j < Columns.size(); j++)
+                {
+                    if (X.Edges_setto_0[j] || X.Edges_setto_1[j])
+                    {
+                        continue;
+                    }
+                    if (G.target(Columns[j].first) == t)
+                    {
+                        if (coreLP.primal(Columns[j].second) > 0.3)
+                        {
+                            if (S_1_used < S_2_used)
+                            {
+                                S_1.push_back(j);
+                                S_1_used++;
+                            }
+                            else
+                            {
+                                S_2.push_back(j);
+                                S_2_used++;
+                            }
+                        }
+                        else
+                        {
+                            if (S_1_unused < S_2_unused)
+                            {
+                                S_1.push_back(j);
+                                S_1_unused++;
+                            }
+                            else
+                            {
+                                S_2.push_back(j);
+                                S_2_unused++;
+                            }
+                        }
+                    }
+                }
+                boost::dynamic_bitset<> new0s = X.Edges_setto_0;
+                boost::dynamic_bitset<> new1s = X.Edges_setto_1;
+                new0s.resize(Columns.size());
+                new1s.resize(Columns.size());
+
+                for (size_t k : S_1)
+                {
+                    new0s.set(k);
+                }
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs in S_2 set are set to 0.
+                for (size_t k : S_1)
+                {
+                    new0s.reset(k);
+                }
+                for (size_t k : S_2)
+                {
+                    new0s.set(k);
+                }
+                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs in S_2 set are set to 0.
             }
         }
 #pragma endregion
@@ -512,9 +644,12 @@ namespace BnCnP
                 }
             }
 
-            // Pricing step
-            coreLP.solve();
-            Pricing();
+            // Column generation step
+            bool Not_Optimally_solved = true;
+            while (Not_Optimally_solved){
+                coreLP.solve();
+                Not_Optimally_solved = Pricing();
+            }
 
             // Now we can Compute a Lowerbound
             coreLP.solve();
@@ -525,9 +660,7 @@ namespace BnCnP
             }
 
             // Separation step
-            bool found_violated_eqs = Separation();
-
-            if (found_violated_eqs)
+            if (Separation())
             {
                 nodes.emplace_front(*this, X.ID, X.Edges_setto_0, X.Edges_setto_1, X.LB, ++idgiver);
                 return;
@@ -537,7 +670,7 @@ namespace BnCnP
             size_t i = 0;
             while (i < Columns.size())
             {
-                if (std::abs(coreLP.primal(Columns[i].second) - std::round(coreLP.primal(Columns[i].second))) < 1e-9)
+                if (std::abs(coreLP.primal(Columns[i].second) - std::round(coreLP.primal(Columns[i].second))) < 1e-7)
                 {
                     i++;
                 }
@@ -562,23 +695,27 @@ namespace BnCnP
             const ListDigraph &_G,
             const ListDigraph::NodeMap<int> &_Label,
             const ListDigraph::ArcMap<double> &_weight,
+            const double timelimt = 10,
             const double _Upper_bound = std::numeric_limits<double>::max(),
-            const int col = 0,
-            const int sep = 5,
+            const int sep = 20,
+            const int col = 20,
             const int exploring_steps = 100,
-            const size_t _initarcs = 10,
-            const double timelimt = 600) : G(_G),
+            const size_t _initarcs = 1) : G(_G),
                                            Label(_Label),
                                            weight(_weight),
                                            IsCol(_G, false),
                                            Upper_bound(_Upper_bound),
-                                           col_add_number(col),
                                            sepequality_add_number(sep),
+                                           col_add_number(col),
                                            exploring_steps(exploring_steps),
                                            initarcs(_initarcs),
                                            timeout(timelimt)
         {
             n = countNodes(_G);
+            if (initarcs < 0.3 * n)
+            {
+                initarcs = std::ceil(0.3 * n);
+            }
             V.resize(n);
             for (ListDigraph::NodeIt i(G); i != INVALID; ++i)
             {
@@ -617,7 +754,6 @@ namespace BnCnP
 
             while (!nodes.empty() && t.realTime() < timeout)
             {
-
                 node_BnCnPtree X = nodes.front();
                 nodes.pop_front();
                 process_Node(X);
@@ -659,8 +795,9 @@ namespace BnCnP
 #pragma endregion
 
 #pragma region Query Functions
-        bool get_OPTsolved() { return OPTsolved; }
-        double OPTval()
+        bool get_OPTsolved() const { return OPTsolved; }
+
+        double OPTval() const
         {
             if (!solved)
             {

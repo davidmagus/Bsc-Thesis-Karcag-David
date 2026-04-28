@@ -2,8 +2,22 @@
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
-#include <algorithm>
 #include <climits>
+#include <iostream>
+#include <fstream>
+#include <filesystem> // C++17 mappa kezeléshez
+
+namespace fs = std::filesystem;
+
+// Konstans útvonal a kimeneti fájloknak
+const std::string OUT_DIR = "analysis/Benchmarks/";
+
+// Segédfüggvény: garantálja, hogy a célmappa létezik
+void ensure_out_dir() {
+    if (!fs::exists(OUT_DIR)) {
+        fs::create_directories(OUT_DIR);
+    }
+}
 
 std::time_t Makestats::stringToTime(const std::string &date_str)
 {
@@ -16,7 +30,7 @@ std::time_t Makestats::stringToTime(const std::string &date_str)
 Makestats::Makestats(const std::string &start_date_str)
 {
     std::time_t start_limit = stringToTime(start_date_str);
-    std::ifstream file("results.txt");
+    std::ifstream file("results.txt"); // A bemenet marad a futtatási mappában
     std::string line;
 
     if (!file.is_open())
@@ -25,27 +39,22 @@ Makestats::Makestats(const std::string &start_date_str)
         return;
     }
 
-    // Fejléc átugrása
-    std::getline(file, line);
+    std::getline(file, line); // Fejléc átugrása
 
     while (std::getline(file, line))
     {
-        if (line.empty())
-            continue;
+        if (line.empty()) continue;
 
         std::istringstream ss(line);
         std::string d, t;
-        ss >> d >> t; // Dátum és idő beolvasása (pl. 2026-04-13 12:31:22)
+        ss >> d >> t;
 
-        if (stringToTime(d + " " + t) < start_limit)
-            continue;
+        if (stringToTime(d + " " + t) < start_limit) continue;
 
         int n_val, seed_val;
         ss >> n_val >> seed_val;
 
-        // Entry létrehozása és adatok betöltése a fájl sorrendjében
         test_tools::entry e(n_val, seed_val);
-
         ss >> e.NN_val >> e.NN_time >> e.NN_percentage;
         ss >> e.RNN_val >> e.RNN_time >> e.RNN_percentage;
         ss >> e.Grdy_val >> e.Grdy_time >> e.Grdy_percentage;
@@ -60,18 +69,13 @@ Makestats::Makestats(const std::string &start_date_str)
         e.BnC_solved = (bnc_s == "YES");
         e.HK_solved = (hk_s == "YES");
 
-        // Besorolás a megfelelő 'bucket'-be
         int bucket = 0;
-        for (int th : thresholds)
-        {
-            if (n_val >= th)
-                bucket = th;
-            else
-                break;
+        for (int th : thresholds) {
+            if (n_val >= th) bucket = th;
+            else break;
         }
 
-        if (bucket > 0)
-        {
+        if (bucket > 0) {
             grouped_data[bucket].push_back(e);
         }
     }
@@ -80,12 +84,11 @@ Makestats::Makestats(const std::string &start_date_str)
 
 Makestats::~Makestats() {}
 
-// Megjegyzés: A táblázat- és ábrakészítő függvényeket később implementáljuk.
-
 void Makestats::make_heu_table()
 {
-    std::string html_name = "heu_table.html";
-    std::ofstream html(html_name);
+    ensure_out_dir();
+    std::string html_path = OUT_DIR + "heu_table.html";
+    std::ofstream html(html_path);
 
     html << "<html><head><style>"
          << "table { border-collapse: collapse; font-family: sans-serif; width: 100%; }"
@@ -102,143 +105,90 @@ void Makestats::make_heu_table()
          << "<th>Avg</th><th>Worst</th><th>Avg</th><th>Worst</th>"
          << "<th>Avg</th><th>Worst</th><th>Avg</th><th>Worst</th></tr>";
 
-    // Adatok feldolgozása bucket-enként
     for (auto const &[threshold, entries] : grouped_data)
     {
-        if (entries.empty())
-            continue;
+        if (entries.empty()) continue;
 
-        double sumNN = 0, worstNN = 0;
-        double sumRNN = 0, worstRNN = 0;
-        double sumGr = 0, worstGr = 0;
-        double sumMaxI = 0, worstMaxI = 0;
-        double sumMinI = 0, worstMinI = 0;
-        double sumRandI = 0, worstRandI = 0;
+        double sumNN = 0, worstNN = 0, sumRNN = 0, worstRNN = 0;
+        double sumGr = 0, worstGr = 0, sumMaxI = 0, worstMaxI = 0;
+        double sumMinI = 0, worstMinI = 0, sumRandI = 0, worstRandI = 0;
 
-        for (const auto &e : entries)
-        {
-            sumNN += e.NN_percentage;
-            worstNN = std::max(worstNN, e.NN_percentage);
-            sumRNN += e.RNN_percentage;
-            worstRNN = std::max(worstRNN, e.RNN_percentage);
-            sumGr += e.Grdy_percentage;
-            worstGr = std::max(worstGr, e.Grdy_percentage);
-            sumMaxI += e.Maxinsert_percentage;
-            worstMaxI = std::max(worstMaxI, e.Maxinsert_percentage);
-            sumMinI += e.Mininsert_percentage;
-            worstMinI = std::max(worstMinI, e.Mininsert_percentage);
-            sumRandI += e.Randinsert_percentage;
-            worstRandI = std::max(worstRandI, e.Randinsert_percentage);
+        for (const auto &e : entries) {
+            sumNN += e.NN_percentage; worstNN = std::max(worstNN, e.NN_percentage);
+            sumRNN += e.RNN_percentage; worstRNN = std::max(worstRNN, e.RNN_percentage);
+            sumGr += e.Grdy_percentage; worstGr = std::max(worstGr, e.Grdy_percentage);
+            sumMaxI += e.Maxinsert_percentage; worstMaxI = std::max(worstMaxI, e.Maxinsert_percentage);
+            sumMinI += e.Mininsert_percentage; worstMinI = std::max(worstMinI, e.Mininsert_percentage);
+            sumRandI += e.Randinsert_percentage; worstRandI = std::max(worstRandI, e.Randinsert_percentage);
         }
 
         size_t count = entries.size();
-
-        // Sor kiírása
-        html << "<tr>"
-             << "<td class='header'>" << threshold << "-" << threshold + 10 << "</td>"
+        html << "<tr><td class='header'>" << threshold << "-" << threshold + 10 << "</td>"
              << "<td>" << std::fixed << std::setprecision(2) << (sumNN / count) * 100 << "%</td><td>" << worstNN * 100 << "%</td>"
              << "<td>" << (sumRNN / count) * 100 << "%</td><td>" << worstRNN * 100 << "%</td>"
              << "<td>" << (sumGr / count) * 100 << "%</td><td>" << worstGr * 100 << "%</td>"
              << "<td>" << (sumMaxI / count) * 100 << "%</td><td>" << worstMaxI * 100 << "%</td>"
              << "<td>" << (sumMinI / count) * 100 << "%</td><td>" << worstMinI * 100 << "%</td>"
-             << "<td>" << (sumRandI / count) * 100 << "%</td><td>" << worstRandI * 100 << "%</td>"
-             << "</tr>";
+             << "<td>" << (sumRandI / count) * 100 << "%</td><td>" << worstRandI * 100 << "%</td></tr>";
     }
 
     html << "</table></body></html>";
     html.close();
-
-    // PNG-vé alakítás (Ubuntu alatt az ImageMagick 'import' vagy 'wkhtmltoimage' ajánlott)
-    // Ha nincs fent: sudo apt install wkhtmltopdf
-    std::cout << "HTML tabla elkeszult: heu_table.html" << std::endl;
-
-    // Rendszerhívás a képkonverzióhoz (opcionális, ha telepítve van az eszköz)
-    // system("wkhtmltoimage heu_table.html heu_table.png");
+    std::cout << "HTML kesz: " << html_path << std::endl;
 }
+
 void Makestats::make_heu_chart()
 {
-    // 1. Adatok előkészítése gnuplot számára
-    std::ofstream avg_file("heu_avg.dat");
-    std::ofstream worst_file("heu_worst.dat");
+    ensure_out_dir();
+    std::string avg_dat = OUT_DIR + "heu_avg.dat";
+    std::string worst_dat = OUT_DIR + "heu_worst.dat";
+    std::string gp_path = OUT_DIR + "heu_plots.gp";
 
-    avg_file << "# n NN RNN Greedy MaxI MinI RandI" << std::endl;
-    worst_file << "# n NN RNN Greedy MaxI MinI RandI" << std::endl;
+    std::ofstream avg_file(avg_dat);
+    std::ofstream worst_file(worst_dat);
 
     for (auto const &[threshold, entries] : grouped_data)
     {
-        if (entries.empty())
-            continue;
-
+        if (entries.empty()) continue;
         double sNN = 0, sRNN = 0, sGr = 0, sMax = 0, sMin = 0, sRand = 0;
         double wNN = 0, wRNN = 0, wGr = 0, wMax = 0, wMin = 0, wRand = 0;
 
-        for (const auto &e : entries)
-        {
-            sNN += e.NN_percentage;
-            wNN = std::max(wNN, e.NN_percentage);
-            sRNN += e.RNN_percentage;
-            wRNN = std::max(wRNN, e.RNN_percentage);
-            sGr += e.Grdy_percentage;
-            wGr = std::max(wGr, e.Grdy_percentage);
-            sMax += e.Maxinsert_percentage;
-            wMax = std::max(wMax, e.Maxinsert_percentage);
-            sMin += e.Mininsert_percentage;
-            wMin = std::max(wMin, e.Mininsert_percentage);
-            sRand += e.Randinsert_percentage;
-            wRand = std::max(wRand, e.Randinsert_percentage);
+        for (const auto &e : entries) {
+            sNN += e.NN_percentage; wNN = std::max(wNN, e.NN_percentage);
+            sRNN += e.RNN_percentage; wRNN = std::max(wRNN, e.RNN_percentage);
+            sGr += e.Grdy_percentage; wGr = std::max(wGr, e.Grdy_percentage);
+            sMax += e.Maxinsert_percentage; wMax = std::max(wMax, e.Maxinsert_percentage);
+            sMin += e.Mininsert_percentage; wMin = std::max(wMin, e.Mininsert_percentage);
+            sRand += e.Randinsert_percentage; wRand = std::max(wRand, e.Randinsert_percentage);
         }
-
         size_t c = entries.size();
-        int mid_n = threshold + 5; // A tartomány közepe a tengelyen
-
-        avg_file << mid_n << " " << (sNN / c) * 100 << " " << (sRNN / c) * 100 << " " << (sGr / c) * 100
-                 << " " << (sMax / c) * 100 << " " << (sMin / c) * 100 << " " << (sRand / c) * 100 << std::endl;
-
-        worst_file << mid_n << " " << wNN * 100 << " " << wRNN * 100 << " " << wGr * 100
-                   << " " << wMax * 100 << " " << wMin * 100 << " " << wRand * 100 << std::endl;
+        int mid_n = threshold + 5;
+        avg_file << mid_n << " " << (sNN/c)*100 << " " << (sRNN/c)*100 << " " << (sGr/c)*100 << " " << (sMax/c)*100 << " " << (sMin/c)*100 << " " << (sRand/c)*100 << std::endl;
+        worst_file << mid_n << " " << wNN*100 << " " << wRNN*100 << " " << wGr*100 << " " << wMax*100 << " " << wMin*100 << " " << wRand*100 << std::endl;
     }
-    avg_file.close();
-    worst_file.close();
+    avg_file.close(); worst_file.close();
 
-    std::ofstream gp("heu_plots.gp");
-    gp << "set terminal pngcairo size 800,500 font 'sans,10'" << std::endl;
-    gp << "set xlabel 'n (Problem Range)'" << std::endl;
-    gp << "set ylabel 'Performance (% of Optimum)'" << std::endl;
-    gp << "set grid" << std::endl;
-    gp << "set key outside right center" << std::endl;
-    gp << "set xtics 10" << std::endl;
-
-    // Átlag ábra - Itt heu_avg.dat kell
-    gp << "set output 'heu_avg.png'" << std::endl;
-    gp << "set title 'Average Performance (Grouped by 10s)'" << std::endl;
-    gp << "plot 'heu_avg.dat' u 1:2 w lp pt 7 t 'NN', '' u 1:3 w lp pt 7 t 'RNN', "
-       << "'' u 1:4 w lp pt 7 t 'Greedy', '' u 1:5 w lp pt 7 t 'MaxI', "
-       << "'' u 1:6 w lp pt 7 t 'MinI', '' u 1:7 w lp pt 7 t 'RandI'" << std::endl;
-
-    // Worst ábra - JAVÍTVA: heu_worst.dat kell, nem worst_avg.dat!
-    gp << "set output 'heu_worst.png'" << std::endl;
-    gp << "set title 'Worst Case Performance (Grouped by 10s)'" << std::endl;
-    gp << "plot 'heu_worst.dat' u 1:2 w lp pt 7 t 'NN', '' u 1:3 w lp pt 7 t 'RNN', "
-       << "'' u 1:4 w lp pt 7 t 'Greedy', '' u 1:5 w lp pt 7 t 'MaxI', "
-       << "'' u 1:6 w lp pt 7 t 'MinI', '' u 1:7 w lp pt 7 t 'RandI'" << std::endl;
+    std::ofstream gp(gp_path);
+    gp << "set terminal pngcairo size 800,500 font 'sans,10'\n"
+       << "set xlabel 'n (Problem Range)'\nset ylabel 'Performance (% of Optimum)'\nset grid\n"
+       << "set key outside right center\nset xtics 10\n"
+       << "set output '" << OUT_DIR << "heu_avg.png'\n"
+       << "set title 'Average Performance'\n"
+       << "plot '" << avg_dat << "' u 1:2 w lp pt 7 t 'NN', '' u 1:3 w lp pt 7 t 'RNN', '' u 1:4 w lp pt 7 t 'Greedy', '' u 1:5 w lp pt 7 t 'MaxI', '' u 1:6 w lp pt 7 t 'MinI', '' u 1:7 w lp pt 7 t 'RandI'\n"
+       << "set output '" << OUT_DIR << "heu_worst.png'\n"
+       << "set title 'Worst Case Performance'\n"
+       << "plot '" << worst_dat << "' u 1:2 w lp pt 7 t 'NN', '' u 1:3 w lp pt 7 t 'RNN', '' u 1:4 w lp pt 7 t 'Greedy', '' u 1:5 w lp pt 7 t 'MaxI', '' u 1:6 w lp pt 7 t 'MinI', '' u 1:7 w lp pt 7 t 'RandI'\n";
     gp.close();
 
-    system("gnuplot heu_plots.gp");
+    std::string cmd = "gnuplot " + gp_path;
+    system(cmd.c_str());
 
-    // Gnuplot futtatása
-    system("gnuplot heu_plots.gp");
-
-    // 3. HTML kiegészítése a képekkel
-    std::ofstream html("heu_table.html", std::ios::app);
-    html << "<br><hr><h2>Visualization</h2>"
-         << "<div style='display: flex; flex-direction: column; align-items: center;'>"
-         << "<img src='heu_avg.png' style='margin-bottom: 20px;'>"
-         << "<img src='heu_worst.png'>"
-         << "</div></body></html>";
+    std::ofstream html(OUT_DIR + "heu_table.html", std::ios::app);
+    html << "<br><hr><h2>Visualization</h2><div style='display: flex; flex-direction: column; align-items: center;'>"
+         << "<img src='heu_avg.png' style='margin-bottom: 20px;'><img src='heu_worst.png'></div></body></html>";
     html.close();
-
-    std::cout << "Abrak elmentve es hozzaadva a heu_table.html-hez." << std::endl;
 }
+
 void Makestats::make_BnC_table() {}
 void Makestats::make_HK_table() {}
 void Makestats::make_HK_BnC_table() {}

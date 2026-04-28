@@ -1,11 +1,7 @@
 #pragma once
-#include <iostream>
-#include <fstream>
 #include <vector>
 #include <string>
 #include <map>
-#include <ctime>
-#include <iomanip> // std::get_time miatt
 #include "test_tools.h"
 
 class Makestats
