@@ -145,15 +145,21 @@ namespace test_tools
 
     inline std::vector<entry> Results;
 
-    inline int one_run(int num, int seed = 0, vector<string> what_to_do = {"BnC"},int timelimit = 30, bool noisy = false)
+    inline void Generate_Example(int num, int seed)
     {
         Timer timer;
-#pragma region Generating Examples
-        RandTSP::Make_completeTSP(num, seed);
-        // cout << "Graph Made in " << timer.realTime() << endl;
-        timer.reset();
+        #pragma region Generating Examples
+                RandTSP::Make_completeTSP(num, seed);
+                // cout << "Graph Made in " << timer.realTime() << endl;
+                timer.reset();
 
-#pragma endregion
+        #pragma endregion
+    }
+
+
+    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    {
+        Timer timer;
         std::cout << "Timelimit: " << timelimit << " seconds " << " Running: ";
         for (string x : what_to_do)
         {
@@ -317,27 +323,11 @@ namespace test_tools
                 // cout << endl;
                 // cout << "Time: " << timer.realTime() << endl;
             }
-            {
-                timer.restart();
-                std::cout << "\nBranch and Cut and Price 2..." << "\n";
-                BnCnP::Algorithm<BnCnP::Silent, 2> ALG(G, Label, weight, timelimit);
-                Results.back().BnC_val = ALG.solve();
-                Results.back().BnC_Time = timer.realTime();
-                Results.back().BnC_solved = ALG.get_OPTsolved();
-                std::cout << "Opt value: " << Results.back().BnC_val << " Opt: " << ALG.get_OPTsolved() << endl;
-                if (noisy)
-                {
-                    ALG.printroute();
-                }
-                // cout << endl;
-                // cout << "Time: " << timer.realTime() << endl;
-            }
         }
 #pragma endregion
 
 #pragma region HeldKarp
-        int HeldKarp = count(what_to_do.begin(), what_to_do.end(), "HK");
-        if (HeldKarp)
+        if (count(what_to_do.begin(), what_to_do.end(), "HK"))
         {
             {
                 // ListDigraph::Node o;
@@ -374,11 +364,18 @@ namespace test_tools
             }
         }
 #pragma endregion
-
-        Results.back().finalize();
-        Results.back().save();
-        // cout << "NN approximation percentage for: " << num << ": " << Results.back().NN_percentage << " Greedy percentage: " << Results.back().Grdy_percentage << " Greedy time: " << Results.back().Grdy_time << endl;
+        if (count(what_to_do.begin(), what_to_do.end(), "Log"))
+        {
+            Results.back().finalize();
+            Results.back().save();
+        }// cout << "NN approximation percentage for: " << num << ": " << Results.back().NN_percentage << " Greedy percentage: " << Results.back().Grdy_percentage << " Greedy time: " << Results.back().Grdy_time << endl;
         return 0;
+    }
+
+    inline int one_run(int num, int seed = 0,const vector<string> &what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    {
+        Generate_Example(num, seed);
+        return run(num, seed, what_to_do, timelimit, noisy);
     }
 }
 #endif

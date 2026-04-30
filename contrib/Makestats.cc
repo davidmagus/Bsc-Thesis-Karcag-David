@@ -87,7 +87,7 @@ Makestats::~Makestats() {}
 void Makestats::make_heu_table()
 {
     ensure_out_dir();
-    std::string html_path = OUT_DIR + "heu_table.html";
+    std::string html_path = OUT_DIR + "Statistics.html";
     std::ofstream html(html_path);
 
     html << "<html><head><style>"
@@ -183,7 +183,7 @@ void Makestats::make_heu_chart()
     std::string cmd = "gnuplot " + gp_path;
     system(cmd.c_str());
 
-    std::ofstream html(OUT_DIR + "heu_table.html", std::ios::app);
+    std::ofstream html(OUT_DIR + "Statistics.html", std::ios::app);
     html << "<br><hr><h2>Visualization</h2><div style='display: flex; flex-direction: column; align-items: center;'>"
          << "<img src='heu_avg.png' style='margin-bottom: 20px;'><img src='heu_worst.png'></div></body></html>";
     html.close();

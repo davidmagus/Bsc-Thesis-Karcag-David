@@ -16,7 +16,7 @@ namespace Heuristic
     {
         std::ofstream logFile;
         int counter;
-        Logging() : logFile("Heu.log") { counter = 1500; }
+        Logging() : logFile("analysis/log/Heu.log") { counter = 1500; }
 
         template <typename... Args>
         void log(Args... args)

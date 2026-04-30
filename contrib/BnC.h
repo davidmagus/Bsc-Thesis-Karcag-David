@@ -255,7 +255,7 @@ namespace BnCnP
 
 #pragma endregion
 
-#pragma region Adding new column
+#pragma region column_adding
         void addcol(ListDigraph::Arc a)
         {
             if (!IsCol[a])
@@ -361,7 +361,8 @@ namespace BnCnP
         }
 
 #pragma endregion
-#pragma region Pricing
+
+#pragma region Pricing // Ha félbehagyjuk onnan folytassuk
         bool Pricing() // A bool értéke azt jelzi kell-e a tovább folytatni az oszlopgenerálást, ha true akkor igen
         {
             struct ActiveConstraint {
@@ -375,31 +376,30 @@ namespace BnCnP
 
             for (auto& i : deg_eqs) {
                 double d = coreLP.dual(i.eq);
-                if (d > 0) {
+                if (d != 0) {
                     active_constraints.push_back({d, static_cast<void*>(&i), ActiveConstraint::DEG});
                 }
             }
             for (auto& i : sep_ineqs) {
                 double d = coreLP.dual(i.eq);
-                if (d > 0) {
+                if (d != 0) {
                     active_constraints.push_back({d, static_cast<void*>(&i), ActiveConstraint::SEP});
                 }
             }
 
             for (ListDigraph::Arc a : Arcs_notincluded) {
-                double Dualcost = -weight[a];
+                double Dualreducedcost = weight[a];
 
                 for (const auto& constr : active_constraints) {
                     if (constr.type == ActiveConstraint::DEG) {
                         auto* p = static_cast<degree_eq*>(constr.ptr);
-                        Dualcost += constr.dual_val * p->coeff(*this, a);
+                        Dualreducedcost -= constr.dual_val * p->coeff(*this, a);
                     } else {
                         auto* p = static_cast<separation_ineq*>(constr.ptr);
-                        Dualcost += constr.dual_val * p->coeff(*this, a);
+                        Dualreducedcost -= constr.dual_val * p->coeff(*this, a);
                     }
                 }
-
-                if (Dualcost >= 0) {
+                if (Dualreducedcost < 0) {
                     counter++;
                     if (counter <= col_add_number)
                     {
@@ -697,10 +697,10 @@ namespace BnCnP
             const ListDigraph::ArcMap<double> &_weight,
             const double timelimt = 10,
             const double _Upper_bound = std::numeric_limits<double>::max(),
-            const int sep = 20,
-            const int col = 20,
+            const int sep = 1000,
+            const int col = 10,
             const int exploring_steps = 100,
-            const size_t _initarcs = 1) : G(_G),
+            const size_t _initarcs = 15) : G(_G),
                                            Label(_Label),
                                            weight(_weight),
                                            IsCol(_G, false),
@@ -712,10 +712,7 @@ namespace BnCnP
                                            timeout(timelimt)
         {
             n = countNodes(_G);
-            if (initarcs < 0.3 * n)
-            {
-                initarcs = std::ceil(0.3 * n);
-            }
+            if (initarcs > static_cast<size_t>(n-1)){initarcs = static_cast<size_t>(n-1);}
             V.resize(n);
             for (ListDigraph::NodeIt i(G); i != INVALID; ++i)
             {
@@ -762,6 +759,7 @@ namespace BnCnP
             {
                 OPTsolved = true;
             }
+            cout << " Arcs left out: " << Arcs_notincluded.size() << endl;
             solved = 1;
             return Best_Val;
         }
