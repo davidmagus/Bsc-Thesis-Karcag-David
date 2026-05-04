@@ -501,23 +501,49 @@ namespace BnCnP
                 new0s.resize(Columns.size());
                 new1s.resize(Columns.size());
 
-                for (size_t k : Candidate_arcs)
-                {
-                    new0s.set(k);
-                }
-                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0.
-                for (size_t k : Unused_tarcs)
-                {
-                    new0s.set(k);
-                }
 
-                for (size_t j : Candidate_arcs) // Where a Single high value arc is set to 1, and all others to 0.
+                if (!Candidate_arcs.empty())
                 {
-                    new1s.set(j);
-                    new0s.reset(j);
+                    for (size_t k : Candidate_arcs)
+                    {
+                        new0s.set(k);
+                    }
+                    nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0
+                    for (size_t k : Unused_tarcs)
+                    {
+                        new0s.set(k);
+                    }
+
+                    for (size_t j : Candidate_arcs) // Where a Single high value arc is set to 1, and all others to 0.
+                    {
+                        new1s.set(j);
+                        new0s.reset(j);
+                        nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+                        new1s.reset(j);
+                        new0s.set(j);
+                    }
+                }else
+                {
+                    for (size_t k = 0; k < static_cast<size_t>(Unused_tarcs.size()/2); k++)
+                    {
+                        Candidate_arcs.push_back(Unused_tarcs[k]);
+                    }
+                    for (size_t k : Candidate_arcs)
+                    {
+                        new0s.set(k);
+                    }
                     nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
-                    new1s.reset(j);
-                    new0s.set(j);
+                    // Where all the arcs in S_2 set are set to 0.
+                    for (size_t k : Candidate_arcs)
+                    {
+                        new0s.reset(k);
+                    }
+                    for (size_t k : Unused_tarcs)
+                    {
+                        new0s.set(k);
+                    }
+                    nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver);
+                    // Where all the arcs in S_2 set are set to 0.
                 }
             }
             else if constexpr (BRANCHING == 2)
@@ -695,7 +721,7 @@ namespace BnCnP
             const ListDigraph &_G,
             const ListDigraph::NodeMap<int> &_Label,
             const ListDigraph::ArcMap<double> &_weight,
-            const double timelimt = 10,
+            const double timelimit = 10,
             const double _Upper_bound = std::numeric_limits<double>::max(),
             const int sep = 1000,
             const int col = 10,
@@ -709,7 +735,7 @@ namespace BnCnP
                                            col_add_number(col),
                                            exploring_steps(exploring_steps),
                                            initarcs(_initarcs),
-                                           timeout(timelimt)
+                                           timeout(timelimit)
         {
             n = countNodes(_G);
             if (initarcs > static_cast<size_t>(n-1)){initarcs = static_cast<size_t>(n-1);}
@@ -757,6 +783,8 @@ namespace BnCnP
             }
             if (t.realTime() < timeout)
             {
+                int longtime = 100;
+                if (t.realTime() > longtime){ cout << " Optimum found after more than " << longtime << " seconds" << endl; }
                 OPTsolved = true;
             }
             cout << " Arcs left out: " << Arcs_notincluded.size() << endl;

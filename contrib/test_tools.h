@@ -157,10 +157,10 @@ namespace test_tools
     }
 
 
-    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC", "Log"},int run_timelimit = 30, bool noisy = false)
     {
         Timer timer;
-        std::cout << "Timelimit: " << timelimit << " seconds " << " Running: ";
+        std::cout << "Timelimit: " << run_timelimit << " seconds " << " Running: ";
         for (string x : what_to_do)
         {
             std::cout << x << ", ";
@@ -311,11 +311,12 @@ namespace test_tools
             {
                 timer.restart();
                 std::cout << "\nBranch and Cut and Price 1..." << "\n";
-                BnCnP::Algorithm<BnCnP::Silent, 1> ALG(G, Label, weight);
+                BnCnP::Algorithm<BnCnP::Silent, 1> ALG(G, Label, weight, run_timelimit);
                 Results.back().BnC_val = ALG.solve();
                 Results.back().BnC_Time = timer.realTime();
                 Results.back().BnC_solved = ALG.get_OPTsolved();
-                std::cout << "Opt value: " << Results.back().BnC_val << " Opt: " << ALG.get_OPTsolved() << endl;
+                std::cout << "Opt value: " << Results.back().BnC_val << " Opt: " << ALG.get_OPTsolved() <<
+                    " Time spent: " << Results.back().BnC_Time << endl;
                 if (noisy)
                 {
                     ALG.printroute();
@@ -372,7 +373,7 @@ namespace test_tools
         return 0;
     }
 
-    inline int one_run(int num, int seed = 0,const vector<string> &what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    inline int one_run(int num, int seed = 0,const vector<string> &what_to_do = {"BnC", "Heu", "Log"},int timelimit = 600, bool noisy = false)
     {
         Generate_Example(num, seed);
         return run(num, seed, what_to_do, timelimit, noisy);
