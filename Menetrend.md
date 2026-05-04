@@ -17,5 +17,11 @@ Tervezett befejezés: 2026.05.14 Csütörtök
 ### Április 20-26, 27-3
 - [ ] Új Branch and Cut and Price fordított prioritásokkal - Kihagyható
 - Mérések, írás befejezése, hiányosságok pótlása
-### Május 4-10, 11-14 (Csütörtök)
-- Mérések, írás befejezése, hiányosságok pótlása
+### Május 4-10,
+- Fésük
+### Május 11-14 (Csütörtök)
+- Utolsó kör Held-Karp
+- 14ig doga megírása
+
+### Május 21
+- Mérések
