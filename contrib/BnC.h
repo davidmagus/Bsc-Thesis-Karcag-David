@@ -154,7 +154,7 @@ namespace BnCnP
         list<node_BnCnPtree> nodes; // A fegoldolgozatlan nodeok listája
 #pragma endregion
 
-#pragma region Inequalities
+#pragma region Inequalities //fesű
         struct degree_eq
         {
             ListDigraph::Node v;
