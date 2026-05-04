@@ -1,5 +1,5 @@
 #pragma once
-#pragma region Includes, Namespaces
+#pragma region Includes_Namespaces
 #include <iostream>
 #include <fstream>
 #include <utility>
@@ -55,7 +55,7 @@ namespace Bit
 namespace BnCnP
 {
 
-#pragma region Logging Tools
+#pragma region Logging
     struct Logging
     {
         std::ofstream logFile;
@@ -216,7 +216,7 @@ namespace BnCnP
                     addcol(O, e);
                 }
 
-                O.logger.log("Separation equation added for: ", inside);
+                O.logger.log("sec_separation equation added for: ", inside);
             }
             int coeff(const Algorithm &O, const ListDigraph::Arc &a)
             {
@@ -233,7 +233,6 @@ namespace BnCnP
                     O.coreLP.coeff(eq, e.second, 1);
                 }
             }
-
         };
         vector<separation_ineq> sep_ineqs; // A SEC egyenlőtlenségek listája
 
@@ -243,7 +242,7 @@ namespace BnCnP
             const boost::dynamic_bitset<> relevant;       // Ez a halmaz tartalmaz minden csúcsot ami benne van bármelyik halmazban
             const boost::dynamic_bitset<> H;              // H csúcsai
             const vector<boost::dynamic_bitset<>> Teeth;  // Fogak csúcsai
-            Lp::Row eq;                             // Hozzá tartozó sor
+            Lp::Row eq;                                   // Hozzá tartozó LP sor
             Comb_ineqs(Algorithm &O, const boost::dynamic_bitset<>& relevant, const boost::dynamic_bitset<>& h,
                 const vector<boost::dynamic_bitset<>>& teeth)
                 : relevant(relevant),
@@ -251,6 +250,7 @@ namespace BnCnP
                   Teeth(teeth)
             {
                 eq = O.coreLP.addRow(Teeth.size() * 3 + 1, 0, INFINITY); // nagyobb mint 6k + 4 ami 3t + 1
+                O.logger.log("Comb inequality added for: ", H, " Number of teeth: ", Teeth.size());
                 for (std::pair<ListDigraph::Arc, Lp::Col> e : O.Columns)
                 {
                     addcol(O, e);
@@ -264,7 +264,7 @@ namespace BnCnP
                     int cnt = 0;
                     // Legfeljebb háromszor lehet a az egyenletben egyszer H miatt és mehet az él két fog között
 
-                    vector<boost::dynamic_bitset<>>::const_iterator tooth = Teeth.begin();
+                    auto tooth = Teeth.begin();
                     while(cnt < 2 && tooth != Teeth.end()) // Csak kettő lehet a fogakból
                     {
                         if ( (*tooth)[s] != (*tooth)[t]) // Azaz adott fogban csak az egyik van benne meaning eleme d(T)
@@ -457,7 +457,7 @@ namespace BnCnP
 #pragma endregion
 
 #pragma region Separation
-        bool Separation() // Returns true if separation equalities have been found
+        bool sec_separation() // Returns true if separation equalities have been found
         {
             FilterArcs<const ListDigraph, ListDigraph::ArcMap<bool>> Flowgraph(G, IsCol);
             ListDigraph::ArcMap<double> primalsol(G);
@@ -506,6 +506,59 @@ namespace BnCnP
             }
 
             return !cuts.empty();
+        }
+
+        struct Handle
+        {
+            vector<int> maxbackval; // A H-hoz tartozó max_back érték
+            double coboundary;      // H-ból kivezető összérték
+
+            list<int> inside;       //Csúcsok amik a nyélben vannak
+            list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
+            list<int> subto1;
+            //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
+            list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
+        };
+
+        class maxback_Handle_growing
+        {
+            Handle current_handle;
+            public:
+            maxback_Handle_growing(Algorithm& O, int i, int j)
+            {
+                for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
+                {
+                    int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
+                    //Itt tartok Éppen!!!
+                }
+                current_handle.inside.push_back(i);
+                current_handle.extremof1.push_back(j);
+            };
+        };
+
+        bool Comb_separation(const vector<int>& IN,const vector<int>& OUT) //Returns true if comb ineqs are found
+        {
+            bool found = false;
+            int root = 0;
+            vector<vector<int>> potential_handles{}; // 1esekből álló út egyik, másik vége párok vannak benne
+            while (root < n)
+            {
+                if (IN[root] == -1 || OUT[root] == -1)
+                {
+                    ++root;
+                    continue;
+                }
+
+                int node = OUT[root];
+
+                while (OUT[node] != -1)
+                {
+                    node = OUT[node];
+                };
+                potential_handles.emplace_back(root, node);
+            }
+
+            return found;
         }
 #pragma endregion
 
@@ -659,7 +712,7 @@ namespace BnCnP
         }
 #pragma endregion
 
-#pragma region Processing a Node
+#pragma region Processing_Node
         void process_Node(node_BnCnPtree &X)
         {
             logger.log("\nProcessing Node: ", X.ID, " Lower Bound: ", X.LB, " Current Upper Bound: ", Best_Val);
@@ -698,27 +751,37 @@ namespace BnCnP
                 return;
             }
 
-            // Separation step
-            if (Separation())
+            // sec_separation step
+            if (sec_separation())
             {
                 nodes.emplace_front(*this, X.ID, X.Edges_setto_0, X.Edges_setto_1, X.LB, ++idgiver);
                 return;
             }
 
-            // If the solution is feasablie constraintwise we start fixing non intiger arcs as integers
+            //Making the sol intiger
+            // If the solution is feasablie constraintwise we start looking for combs then fixing non intiger arcs as integers
             size_t i = 0;
+            vector<int> IN{n, -1}, OUT{n,-1};
+            size_t j = Columns.size();
             while (i < Columns.size())
             {
                 if (std::abs(coreLP.primal(Columns[i].second) - std::round(coreLP.primal(Columns[i].second))) < 1e-7)
                 {
-                    i++;
+                    if (std::abs(coreLP.primal(Columns[i].second) - 1) < 1e-7) // Keressünk egyesekből álló utakat
+                    {
+                        int s = Label[G.source(Columns[i].first)];
+                        int t = Label[G.target(Columns[i].first)];
+                        IN[t] = s;
+                        OUT[s] = t;
+                    }
                 }
                 else
                 {
-                    break;
+                    j = i;
                 }
+                i++;
             }
-            if (i < Columns.size())
+            if (j < Columns.size())
             {
                 Branch(i, X);
             }
@@ -755,7 +818,7 @@ namespace BnCnP
             V.resize(n);
             for (ListDigraph::NodeIt i(G); i != INVALID; ++i)
             {
-                V[_Label[i]] = i;
+                V[_Label[i]] = static_cast<ListDigraphBase::Node>(i);
             }
             logger.log("Nodes: ", n, " Upperbound: ", Upper_bound, "\n");
             Best_Val = 0;
@@ -805,7 +868,7 @@ namespace BnCnP
 
 #pragma endregion
 
-#pragma region Tour Found
+#pragma region Tour_Found
         void Tourfound()
         {
             logger.log("A new Tour found with value: ", coreLP.primal());
@@ -831,7 +894,7 @@ namespace BnCnP
         }
 #pragma endregion
 
-#pragma region Query Functions
+#pragma region Query_Functions
         bool get_OPTsolved() const { return OPTsolved; }
 
         double OPTval() const
@@ -855,7 +918,7 @@ namespace BnCnP
             {
                 if (Label[v] == 0)
                 {
-                    O = v;
+                    O = static_cast<ListDigraphBase::Node>(v);
                     break;
                 }
             }
