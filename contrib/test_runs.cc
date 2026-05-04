@@ -1,9 +1,5 @@
 #include <iostream>
 #include <lemon/list_graph.h>
-#include <lemon/lgf_reader.h>
-#include "Heuristic.h"
-#include "Heldkarp.h"
-#include "TSP_generator.h"
 #include "test_tools.h"
 #include "BnC.h"
 #include <string>
@@ -34,7 +30,7 @@ double get_average(const std::vector<entry> &Results, T entry::*field)
 int main(int argc, char *argv[])
 {
     bool noisy = false;
-    vector<string> what_to_do = {"BnC"};
+    vector<string> what_to_do = {"BnC", "Heu", "Log"};
     std::vector<int> runs;
 
     for (int i = 1; i < argc; i++)

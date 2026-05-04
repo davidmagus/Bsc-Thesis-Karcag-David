@@ -157,7 +157,7 @@ namespace test_tools
     }
 
 
-    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC","Heu", "Log"},int timelimit = 30, bool noisy = false)
     {
         Timer timer;
         std::cout << "Timelimit: " << timelimit << " seconds " << " Running: ";

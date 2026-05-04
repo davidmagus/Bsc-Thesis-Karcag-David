@@ -154,7 +154,7 @@ namespace BnCnP
         list<node_BnCnPtree> nodes; // A fegoldolgozatlan nodeok listája
 #pragma endregion
 
-#pragma region Inequalities //fesű
+#pragma region Inequalities
         struct degree_eq
         {
             ListDigraph::Node v;
@@ -168,27 +168,6 @@ namespace BnCnP
                 {
                     addcol(O, e);
                 }
-            }
-            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc,const Lp::Col>& e)
-            {
-                switch (direction)
-                {
-                case 1:
-                    if (O.G.target(e.first) == v)
-                    {
-                        O.coreLP.coeff(eq, e.second, 1);
-                    }
-                    break;
-
-                case 0:
-                    if (O.G.source(e.first) == v)
-                    {
-                        O.coreLP.coeff(eq, e.second, 1);
-                    }
-                    break;
-                default: throw std::runtime_error("Unknown direction");
-                }
-
             }
             int coeff(const Algorithm &O, const ListDigraph::Arc &a)
             {
@@ -211,16 +190,23 @@ namespace BnCnP
                         return 0;
                     }
                     break;
-                    default:
+                default:
                     throw std::runtime_error("Unknown direction");
                 }
                 return 0;
+            }
+            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc,const Lp::Col>& e)
+            {
+                if (coeff(O, e.first))
+                {
+                    O.coreLP.coeff(eq, e.second, 1);
+                }
             }
         };
         vector<degree_eq> deg_eqs; // A fokszám egyenlőségek
         struct separation_ineq
         {
-            boost::dynamic_bitset<> inside;
+            const boost::dynamic_bitset<> inside;
             Lp::Row eq;
             separation_ineq(Algorithm &O, const boost::dynamic_bitset<> &_inside) : inside(_inside)
             {
@@ -232,26 +218,79 @@ namespace BnCnP
 
                 O.logger.log("Separation equation added for: ", inside);
             }
-            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc, Lp::Col>& e)
-            {
-                if (inside[O.Label[O.G.target(e.first)]] && inside[O.Label[O.G.source(e.first)]])
-                {
-                    O.coreLP.coeff(eq, e.second, 1);
-                }
-            }
             int coeff(const Algorithm &O, const ListDigraph::Arc &a)
             {
                 if (inside[O.Label[O.G.target(a)]] && inside[O.Label[O.G.source(a)]])
                 {
                     return 1;
                 }
-                else
+                return 0;
+            }
+            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc, Lp::Col>& e)
+            {
+                if (coeff(O, e.first))
                 {
-                    return 0;
+                    O.coreLP.coeff(eq, e.second, 1);
+                }
+            }
+
+        };
+        vector<separation_ineq> sep_ineqs; // A SEC egyenlőtlenségek listája
+
+        class Comb_ineqs // Az alternatív alakot használjuk
+        {
+            public:
+            const boost::dynamic_bitset<> relevant;       // Ez a halmaz tartalmaz minden csúcsot ami benne van bármelyik halmazban
+            const boost::dynamic_bitset<> H;              // H csúcsai
+            const vector<boost::dynamic_bitset<>> Teeth;  // Fogak csúcsai
+            Lp::Row eq;                             // Hozzá tartozó sor
+            Comb_ineqs(Algorithm &O, const boost::dynamic_bitset<>& relevant, const boost::dynamic_bitset<>& h,
+                const vector<boost::dynamic_bitset<>>& teeth)
+                : relevant(relevant),
+                  H(h),
+                  Teeth(teeth)
+            {
+                eq = O.coreLP.addRow(Teeth.size() * 3 + 1, 0, INFINITY); // nagyobb mint 6k + 4 ami 3t + 1
+                for (std::pair<ListDigraph::Arc, Lp::Col> e : O.Columns)
+                {
+                    addcol(O, e);
+                }
+            }
+            int coeff(const Algorithm &O, const ListDigraph::Arc &a)
+            {
+                if (const int s = O.Label[O.G.source(a)], t = O.Label[O.G.target(a)]; relevant[s] || relevant[t])
+                // ha legalább az egyik csúcs releváns átvizsgáljuk.
+                {
+                    int cnt = 0;
+                    // Legfeljebb háromszor lehet a az egyenletben egyszer H miatt és mehet az él két fog között
+
+                    vector<boost::dynamic_bitset<>>::const_iterator tooth = Teeth.begin();
+                    while(cnt < 2 && tooth != Teeth.end()) // Csak kettő lehet a fogakból
+                    {
+                        if ( (*tooth)[s] != (*tooth)[t]) // Azaz adott fogban csak az egyik van benne meaning eleme d(T)
+                        {
+                            ++cnt;
+                        }
+                        ++tooth;
+                    }
+
+                    if (H[s] != H[t]) //Nézzük meg H-t is
+                    {
+                        ++cnt;
+                    }
+
+                    return cnt;
+                }
+                return 0;
+            }
+            void addcol(Algorithm &O, const std::pair<ListDigraph::Arc, Lp::Col>& e)
+            {
+                if (int cf = coeff(O, e.first))
+                {
+                    O.coreLP.coeff(eq, e.second, cf);
                 }
             }
         };
-        vector<separation_ineq> sep_ineqs; // A SEC egyenlőtlenségek listája
 
 #pragma endregion
 
