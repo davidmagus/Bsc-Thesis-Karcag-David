@@ -508,31 +508,34 @@ namespace BnCnP
             return !cuts.empty();
         }
 
-        struct Handle
+        class maxback_Handle_growing
         {
+            public:
             vector<int> maxbackval; // A H-hoz tartozó max_back érték
-            double coboundary;      // H-ból kivezető összérték
+            double coboundary = 0;      // H-ból kivezető összérték
 
             list<int> inside;       //Csúcsok amik a nyélben vannak
             list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
             list<int> subto1;
             //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
             list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
-        };
 
-        class maxback_Handle_growing
-        {
-            Handle current_handle;
-            public:
             maxback_Handle_growing(Algorithm& O, int i, int j)
             {
+                 maxbackval.assign(O.n, 0);
+
+                //Init maxbackval
                 for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
                 {
+                    if (!O.IsCol[a] || )
+                    {
+                        continue; //Ha nem oszlop vagy a x_a = 0 marad 0
+                    }
                     int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
                     //Itt tartok Éppen!!!
                 }
-                current_handle.inside.push_back(i);
-                current_handle.extremof1.push_back(j);
+
+                // Init csúcshalmazok
             };
         };
 
