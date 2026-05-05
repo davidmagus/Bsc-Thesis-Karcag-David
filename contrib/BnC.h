@@ -18,7 +18,7 @@
 using namespace std;
 using namespace lemon;
 #pragma endregion
-constexpr size_t bitmask_maxsize = 100;
+
 #pragma region Bitmask_extensions
 namespace Bit
 {
@@ -54,7 +54,6 @@ namespace Bit
 
 namespace BnCnP
 {
-
 #pragma region Logging
     struct Logging
     {
@@ -83,11 +82,6 @@ namespace BnCnP
     };
 
 #pragma endregion
-    // Branching schemes:
-    //  1: original
-    //  2: take a node whole node set it to 0 or 1
-    //  3: take a node close enough to 0.5
-    //  4: Split the Inarcs into 2 groups equal in size containing a similar number of highly used arcs
 
     template <typename DEBUG = Silent, int BRANCHING = 1> // Template parameters: <DEBUG = STSP::Silent / STSP::Logging
     class Algorithm
@@ -112,6 +106,7 @@ namespace BnCnP
         Lp coreLP;
         vector<std::pair<ListDigraph::Arc, Lp::Col>> Columns; // Oszlopok
         list<ListDigraph::Arc> Arcs_notincluded;
+        ListDigraph::ArcMap<Lp::Col> Col;
 
         // Paraméterek
         const int sepequality_add_number;
@@ -299,8 +294,8 @@ namespace BnCnP
         {
             if (!IsCol[a])
             {
-                Lp::Col Col = coreLP.addCol();
-                std::pair<ListDigraph::Arc, Lp::Col> e{a, Col};
+                Lp::Col Col_ = coreLP.addCol();
+                std::pair<ListDigraph::Arc, Lp::Col> e{a, Col_};
                 Columns.push_back(e);
                 for (degree_eq i : deg_eqs)
                 {
@@ -311,14 +306,15 @@ namespace BnCnP
                     i.addcol(*this, e);
                 }
                 IsCol[a] = true;
-                coreLP.objCoeff(Col, weight[a]);
-                coreLP.colBounds(Col, 0, 1);
+                Col[a] = Col_;
+                coreLP.objCoeff(Col_, weight[a]);
+                coreLP.colBounds(Col_, 0, 1);
                 logger.log("Column added for arc: (", Label[G.source(a)], ",", Label[G.target(a)], ")");
             }
         }
 #pragma endregion
 
-#pragma region Initialization
+#pragma region Initialization //Legyen tobb heu
         void init()
         {
             logger.log("\nIntialization...");
@@ -456,7 +452,7 @@ namespace BnCnP
         }
 #pragma endregion
 
-#pragma region Separation
+#pragma region SEC_Separation
         bool sec_separation() // Returns true if separation equalities have been found
         {
             FilterArcs<const ListDigraph, ListDigraph::ArcMap<bool>> Flowgraph(G, IsCol);
@@ -507,37 +503,156 @@ namespace BnCnP
 
             return !cuts.empty();
         }
+#pragma endregion
 
+#pragma  region Comb_Separation
         class maxback_Handle_growing
         {
             public:
+            Algorithm& O;
             vector<int> maxbackval; // A H-hoz tartozó max_back érték
             double coboundary = 0;      // H-ból kivezető összérték
-
             list<int> inside;       //Csúcsok amik a nyélben vannak
             list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
             list<int> subto1;
             //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
-            list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
+            vector<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
 
-            maxback_Handle_growing(Algorithm& O, int i, int j)
+            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0)
             {
-                 maxbackval.assign(O.n, 0);
-
-                //Init maxbackval
+                vector<int> temp_infto1(O.n, 1);
+                vector<int> temp_extremof1(O.n, 0);
+                //Init
                 for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
                 {
-                    if (!O.IsCol[a] || )
+                    double x_a = 0;
+                    if (!O.IsCol[a] || (x_a = O.coreLP.primal(O.Col[a])) == 0)
                     {
-                        continue; //Ha nem oszlop vagy a x_a = 0 marad 0
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
                     }
-                    int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
-                    //Itt tartok Éppen!!!
+                    const int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
+                    maxbackval[t] = x_a;
+                    if (x_a == 1)
+                    {
+                        temp_extremof1[t] = 1;
+                        temp_infto1[t] = 0;
+                    }
+                    coboundary += x_a;
                 }
 
-                // Init csúcshalmazok
-            };
+                for (ListDigraph::InArcIt a(O.G, O.V[i]); a != INVALID; ++a)
+                {
+                    double x_a = 0;
+                    if (!O.IsCol[a] || (x_a = O.coreLP.primal(O.Col[a])) == 0)
+                    {
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                    }
+                    const int s = O.Label[O.G.source(static_cast<ListDigraphBase::Arc>(a))];
+                    maxbackval[s] += x_a;
+                    if (x_a == 1)
+                    {
+                        temp_extremof1[s] = 1;
+                        temp_infto1[s] = 0;
+                    }
+                    if (maxbackval[s] >= 1)
+                    {
+                        if (maxbackval[s] >= 1.66)
+                        {
+                            subto1.push_back(i);
+                            temp_extremof1[s] = 0;
+                            temp_infto1[s] = 0;
+                        }
+                        else if (temp_extremof1[s] != 1)
+                        {
+                            subto1.push_back(s);
+                            temp_infto1[s] = 0;
+                        }
+                    }
+                    coboundary += x_a;
+                }
+
+                sort(subto1.begin(), subto1.end(), [&](const int& a, const int& b)
+                {
+                    return maxbackval[a] < maxbackval[b];
+                });
+
+                for (size_t k = 0; k < temp_infto1.size(); ++k)
+                {
+                    if (temp_infto1[k] >= 1)
+                    {
+                        infto1.push_back(k);
+                    }
+                }
+                sort(infto1.begin(), infto1.end(), [&](const int& a, const int& b)
+                {
+                    return maxbackval[a] < maxbackval[b];
+                });
+
+                for (size_t k = 0; k < temp_extremof1.size(); ++k)
+                {
+                    if (temp_extremof1[k] >= 1)
+                    {
+                        extremof1.push_back(k);
+                    }
+                }
+                sort(extremof1.begin(), extremof1.end(), [&](const int& a, const int& b)
+                {
+                    return maxbackval[a] < maxbackval[b];
+                });
+
+            }
+
+            bool produce()
+            {
+                 while(std::abs(coboundary / 2 - std::round(coboundary)) <= 0.2)
+                     //Legalább 0.2-re van visszadjuk, ha nem növeljük e legjobban láttot subto1 élel.
+                 {
+                     if (subto1.size() != 0)
+                     {
+                         inside.push_back(subto1.back());
+                         subto1.pop_back();
+                     }else if (infto1.size() != 0)
+                     {
+                         inside.push_back(infto1.back());
+                         infto1.pop_back();
+                     }else if (extremof1.size() != 0)
+                     {
+                         inside.push_back(extremof1.back());
+                         extremof1.pop_back();
+                     }
+                     if (inside.size() >= O.n/2)
+                     {
+                         break;
+                     }
+                }
+
+                if (inside.size() < O.n/2)
+                {
+                    return true;
+                }
+                return false;
+            }
         };
+
+        void lookforteeth(maxback_Handle_growing& H)
+        {
+            int num_of_found_teeth = 0;
+            int target_num_of_teeth = std::floor(H.coboundary / 2.0) * 2.0 + 1.0;
+
+            vector<int> status(n, 0); // 0: authorized, 1 odd, 2 forbiden
+            for (int i : H.extremof1)
+            {
+                status[i] = 1;
+            }
+
+            while (num_of_found_teeth < target_num_of_teeth)
+            {
+                    //Kezdőpont keresése
+
+
+                    // fognövesztés
+            }
+        }
 
         bool Comb_separation(const vector<int>& IN,const vector<int>& OUT) //Returns true if comb ineqs are found
         {
@@ -559,6 +674,23 @@ namespace BnCnP
                     node = OUT[node];
                 };
                 potential_handles.emplace_back(root, node);
+                potential_handles.emplace_back(node, root);
+            }
+
+            while (!potential_handles.empty())
+            {
+                maxback_Handle_growing H_factory = potential_handles.back();
+                potential_handles.pop_back();
+                if (std::abs(H_factory.coboundary / 2 - std::round(H_factory.coboundary)) > 0.2)
+                //Ha legalább 0.2-re van keressünk fogakat
+                {
+                    //fogak keresése
+                }
+
+                while (H_factory.produce())
+                {
+                    //fogak keresése       lookforteeth(H_factory)
+                }
             }
 
             return found;
@@ -794,6 +926,7 @@ namespace BnCnP
             }
         }
 #pragma endregion
+
     public:
 #pragma region Constructor
         Algorithm(
@@ -810,6 +943,7 @@ namespace BnCnP
                                            weight(_weight),
                                            IsCol(_G, false),
                                            Upper_bound(_Upper_bound),
+                                           Col(_G,INVALID),
                                            sepequality_add_number(sep),
                                            col_add_number(col),
                                            exploring_steps(exploring_steps),
