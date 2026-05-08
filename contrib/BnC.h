@@ -511,18 +511,23 @@ namespace BnCnP
             public:
             Algorithm& O;
             vector<int> maxbackval; // A H-hoz tartozó max_back érték
+            vector<list<int>::iterator> pos;
+            // Egy itarátorokból álló lista aminek az i. helyén egy i-re mutató iterátor áll.
+            vector<int> whichlist;
             double coboundary = 0;      // H-ból kivezető összérték
             list<int> inside;       //Csúcsok amik a nyélben vannak
             list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
             list<int> subto1;
             //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
-            vector<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
+            list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
 
-            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0)
+            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0), pos(O.n, inside.end())
             {
                 vector<int> temp_infto1(O.n, 1);
                 vector<int> temp_extremof1(O.n, 0);
                 //Init
+                inside.push_back(i);
+                pos[i] = inside.begin();
                 for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
                 {
                     double x_a = 0;
@@ -558,20 +563,22 @@ namespace BnCnP
                     {
                         if (maxbackval[s] >= 1.66)
                         {
-                            subto1.push_back(i);
+                            subto1.push_back(s);
+                            pos[s] = prev(subto1.end());
                             temp_extremof1[s] = 0;
                             temp_infto1[s] = 0;
                         }
                         else if (temp_extremof1[s] != 1)
                         {
                             subto1.push_back(s);
+                            pos[s] = prev(subto1.end());
                             temp_infto1[s] = 0;
                         }
                     }
                     coboundary += x_a;
                 }
 
-                sort(subto1.begin(), subto1.end(), [&](const int& a, const int& b)
+                subto1.sort(subto1.begin(), subto1.end(), [&](const int& a, const int& b)
                 {
                     return maxbackval[a] < maxbackval[b];
                 });
@@ -581,9 +588,10 @@ namespace BnCnP
                     if (temp_infto1[k] >= 1)
                     {
                         infto1.push_back(k);
+                        pos[k] = prev(infto1.end());
                     }
                 }
-                sort(infto1.begin(), infto1.end(), [&](const int& a, const int& b)
+                infto1.sort(infto1.begin(), infto1.end(), [&](const int& a, const int& b)
                 {
                     return maxbackval[a] < maxbackval[b];
                 });
@@ -593,37 +601,64 @@ namespace BnCnP
                     if (temp_extremof1[k] >= 1)
                     {
                         extremof1.push_back(k);
+                        pos[k] = prev(extremof1.end());
                     }
                 }
-                sort(extremof1.begin(), extremof1.end(), [&](const int& a, const int& b)
+                extremof1.sort(extremof1.begin(), extremof1.end(), [&](const int& a, const int& b)
                 {
                     return maxbackval[a] < maxbackval[b];
                 });
 
             }
 
+            void add_node_to_handle(const int v)
+            /*Egy csúcs hozzáadásakor:
+                - Frissíteni kell a maxback tömböt
+                - Frissíteni Kell a listákat
+                - Frissíteni kell a coboundary értéket (Kivonni ami bele ment (Ez pont a maxback érték, És hozzáadni amí kimegy))
+            */
+            {
+                // Menjünk végig a listákon
+
+                for (auto it = infto1.begin(); it != infto1.end();) {
+
+
+                    if (kell_torolni(*it)) {
+                        it = infto1.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+
+            };
+
             bool produce()
             {
                  while(std::abs(coboundary / 2 - std::round(coboundary)) <= 0.2)
                      //Legalább 0.2-re van visszadjuk, ha nem növeljük e legjobban láttot subto1 élel.
                  {
+                     int new_v;
                      if (subto1.size() != 0)
                      {
-                         inside.push_back(subto1.back());
+                         new_v = subto1.back();
                          subto1.pop_back();
                      }else if (infto1.size() != 0)
                      {
-                         inside.push_back(infto1.back());
+                         new_v = infto1.back();
                          infto1.pop_back();
                      }else if (extremof1.size() != 0)
                      {
-                         inside.push_back(extremof1.back());
+                         new_v = extremof1.back();
                          extremof1.pop_back();
                      }
                      if (inside.size() >= O.n/2)
                      {
                          break;
                      }
+
+                     add_node_to_handle(new_v);
+
+
                 }
 
                 if (inside.size() < O.n/2)
@@ -647,10 +682,18 @@ namespace BnCnP
 
             while (num_of_found_teeth < target_num_of_teeth)
             {
-                    //Kezdőpont keresése
+                int start;
+                    if (H.extremof1.size() != 0)
+                    {
+                        start = H.extremof1.back();
+                        H.extremof1.pop_back();
+                    }else if (H.subto1.size() != 0)
+                    {
+
+                    }
 
 
-                    // fognövesztés
+
             }
         }
 
