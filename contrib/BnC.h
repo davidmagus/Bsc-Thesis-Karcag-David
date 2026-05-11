@@ -95,6 +95,7 @@ namespace BnCnP
         vector<ListDigraph::Node> V;
         const ListDigraph::ArcMap<double> &weight;
         ListDigraph::ArcMap<bool> IsCol;
+        ArcLookUp<ListDigraph> Lookup;
         double Upper_bound;
 
         // belso Eszkozok
@@ -511,9 +512,7 @@ namespace BnCnP
             public:
             Algorithm& O;
             vector<int> maxbackval; // A H-hoz tartozó max_back érték
-            vector<list<int>::iterator> pos;
             // Egy itarátorokból álló lista aminek az i. helyén egy i-re mutató iterátor áll.
-            vector<int> whichlist;
             double coboundary = 0;      // H-ból kivezető összérték
             list<int> inside;       //Csúcsok amik a nyélben vannak
             list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
@@ -521,13 +520,12 @@ namespace BnCnP
             //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
             list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
 
-            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0), pos(O.n, inside.end())
+            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0)
             {
                 vector<int> temp_infto1(O.n, 1);
                 vector<int> temp_extremof1(O.n, 0);
                 //Init
                 inside.push_back(i);
-                pos[i] = inside.begin();
                 for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
                 {
                     double x_a = 0;
@@ -564,14 +562,12 @@ namespace BnCnP
                         if (maxbackval[s] >= 1.66)
                         {
                             subto1.push_back(s);
-                            pos[s] = prev(subto1.end());
                             temp_extremof1[s] = 0;
                             temp_infto1[s] = 0;
                         }
                         else if (temp_extremof1[s] != 1)
                         {
                             subto1.push_back(s);
-                            pos[s] = prev(subto1.end());
                             temp_infto1[s] = 0;
                         }
                     }
@@ -588,7 +584,6 @@ namespace BnCnP
                     if (temp_infto1[k] >= 1)
                     {
                         infto1.push_back(k);
-                        pos[k] = prev(infto1.end());
                     }
                 }
                 infto1.sort(infto1.begin(), infto1.end(), [&](const int& a, const int& b)
@@ -601,7 +596,6 @@ namespace BnCnP
                     if (temp_extremof1[k] >= 1)
                     {
                         extremof1.push_back(k);
-                        pos[k] = prev(extremof1.end());
                     }
                 }
                 extremof1.sort(extremof1.begin(), extremof1.end(), [&](const int& a, const int& b)
@@ -621,9 +615,7 @@ namespace BnCnP
                 // Menjünk végig a listákon
 
                 for (auto it = infto1.begin(); it != infto1.end();) {
-
-
-                    if (kell_torolni(*it)) {
+                    if () {
                         it = infto1.erase(it);
                     } else {
                         ++it;
@@ -775,7 +767,13 @@ namespace BnCnP
                 {
                     new0s.set(k);
                 }
-                nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0.
+                if (Candidate_arcs.size() != 0)
+                {
+                    nodes.emplace_front(*this, X.ID, new0s, new1s, X.LB, ++idgiver); // Where all the arcs with high value are set to 0.
+                }else
+                {
+                    Candidate_arcs = Unused_tarcs;
+                }
                 for (size_t k : Unused_tarcs)
                 {
                     new0s.set(k);
@@ -939,7 +937,7 @@ namespace BnCnP
             //Making the sol intiger
             // If the solution is feasablie constraintwise we start looking for combs then fixing non intiger arcs as integers
             size_t i = 0;
-            vector<int> IN{n, -1}, OUT{n,-1};
+            vector<int> IN(n, -1), OUT(n,-1);
             size_t j = Columns.size();
             while (i < Columns.size())
             {
@@ -961,7 +959,7 @@ namespace BnCnP
             }
             if (j < Columns.size())
             {
-                Branch(i, X);
+                Branch(j, X);
             }
             else
             {
@@ -985,6 +983,7 @@ namespace BnCnP
                                            Label(_Label),
                                            weight(_weight),
                                            IsCol(_G, false),
+                                           Lookup(G),
                                            Upper_bound(_Upper_bound),
                                            Col(_G,INVALID),
                                            sepequality_add_number(sep),

@@ -311,7 +311,7 @@ namespace test_tools
             {
                 timer.restart();
                 std::cout << "\nBranch and Cut and Price 1..." << "\n";
-                BnCnP::Algorithm<BnCnP::Silent, 1> ALG(G, Label, weight);
+                BnCnP::Algorithm<BnCnP::Logging, 1> ALG(G, Label, weight);
                 Results.back().BnC_val = ALG.solve();
                 Results.back().BnC_Time = timer.realTime();
                 Results.back().BnC_solved = ALG.get_OPTsolved();
