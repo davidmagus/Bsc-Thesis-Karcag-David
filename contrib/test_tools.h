@@ -157,7 +157,7 @@ namespace test_tools
     }
 
 
-    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC","Heu", "Log"},int timelimit = 30, bool noisy = false)
+    inline int run(int num, int seed, const vector<string>& what_to_do = {"BnC","Heu", "Log"},int timelimit = 60, bool noisy = false)
     {
         Timer timer;
         std::cout << "Timelimit: " << timelimit << " seconds " << " Running: ";
@@ -311,7 +311,7 @@ namespace test_tools
             {
                 timer.restart();
                 std::cout << "\nBranch and Cut and Price 1..." << "\n";
-                BnCnP::Algorithm<BnCnP::Logging, 1> ALG(G, Label, weight);
+                BnCnP::Algorithm<BnCnP::Logging, 1> ALG(G, Label, weight, timelimit);
                 Results.back().BnC_val = ALG.solve();
                 Results.back().BnC_Time = timer.realTime();
                 Results.back().BnC_solved = ALG.get_OPTsolved();
@@ -372,7 +372,7 @@ namespace test_tools
         return 0;
     }
 
-    inline int one_run(int num, int seed = 0,const vector<string> &what_to_do = {"BnC", "Log"},int timelimit = 30, bool noisy = false)
+    inline int one_run(int num, int seed = 0,const vector<string> &what_to_do = {"BnC", "Log"},int timelimit = 300, bool noisy = false)
     {
         Generate_Example(num, seed);
         return run(num, seed, what_to_do, timelimit, noisy);

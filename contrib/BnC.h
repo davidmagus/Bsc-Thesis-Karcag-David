@@ -1,4 +1,5 @@
 #pragma once
+constexpr double EPS = 1e-9; // Vagy 1e-7, a feladat pontosságától függően
 #pragma region Includes_Namespaces
 #include <iostream>
 #include <fstream>
@@ -59,7 +60,7 @@ namespace BnCnP
     {
         std::ofstream logFile;
         int counter;
-        Logging() : logFile("analysis/Logs/BnC.log") { counter = 1500; }
+        Logging() : logFile("analysis/Logs/BnC.log") { counter = 5000; }
 
         template <typename... Args>
         void log(Args... args)
@@ -156,10 +157,13 @@ namespace BnCnP
             ListDigraph::Node v;
             int direction;
             Lp::Row eq;
-            degree_eq(Algorithm &O, ListDigraph::Node _v, int _direction) : v(_v), direction(_direction)
+            degree_eq(Algorithm &O, ListDigraph::Node _v, int _direction, bool silent = true) : v(_v), direction(_direction)
             {
                 eq = O.coreLP.addRow(1, 0, 1);
-                O.logger.log("Degree equation added: ", O.Label[v], " Direction: ", direction);
+                if (!silent)
+                {
+                    O.logger.log("Degree equation added: ", O.Label[v], " Direction: ", direction);
+                }
                 for (std::pair<ListDigraph::Arc, Lp::Col> e : O.Columns)
                 {
                     addcol(O, e);
@@ -291,7 +295,7 @@ namespace BnCnP
 #pragma endregion
 
 #pragma region column_adding
-        void addcol(ListDigraph::Arc a)
+        void addcol(ListDigraph::Arc a, bool silent = true)
         {
             if (!IsCol[a])
             {
@@ -310,7 +314,10 @@ namespace BnCnP
                 Col[a] = Col_;
                 coreLP.objCoeff(Col_, weight[a]);
                 coreLP.colBounds(Col_, 0, 1);
-                logger.log("Column added for arc: (", Label[G.source(a)], ",", Label[G.target(a)], ")");
+                if (!silent)
+                {
+                    logger.log("Column added for arc: (", Label[G.source(a)], ",", Label[G.target(a)], ")");
+                }
             }
         }
 #pragma endregion
@@ -324,7 +331,7 @@ namespace BnCnP
             CL.Run();
             for (ListDigraph::Arc a : CL.Route)
             {
-                addcol(a);
+                addcol(a, true);
             }
             Best_Val = CL.Length;
             Best_Tour = CL.Route;
@@ -364,7 +371,7 @@ namespace BnCnP
             }
             for (ListDigraph::Arc a : Arcs)
             {
-                addcol(a);
+                addcol(a, true);
             }
 
             logger.log("\nFilling list of not included arcs");
@@ -376,7 +383,7 @@ namespace BnCnP
                 }
             }
 
-            logger.log("\nAdding starting constraints: ");
+            logger.log("\nAdding starting constraints ");
             ListDigraph::NodeIt v(G);
 
             // Első csúcsnál csak az egyik kell
@@ -449,6 +456,7 @@ namespace BnCnP
             {
             return false;  //Nem találtunk sértő oszlopot azaz a jelenlegi megoldás optimális.
             }
+            logger.log("Generating columns");
             return true;   //Ha találtunk akár 1-et is akkor tovább kell iterálni.
         }
 #pragma endregion
@@ -478,8 +486,7 @@ namespace BnCnP
             {
                 st.target(static_cast<ListDigraph::Node>(k));
                 st.runMinCut();
-
-                if (st.flowValue() < 1)
+                if (st.flowValue() < 1.0 - EPS)
                 {
                     boost::dynamic_bitset<> temp(n);
                     for (ListDigraph::NodeIt v(G); v != INVALID; ++v)
@@ -511,21 +518,24 @@ namespace BnCnP
         {
             public:
             Algorithm& O;
-            vector<int> maxbackval; // A H-hoz tartozó max_back érték
+            vector<int> maxbackval; // A H-hoz tartozó max_back érték, az n. indexen mindig 0
             // Egy itarátorokból álló lista aminek az i. helyén egy i-re mutató iterátor áll.
             double coboundary = 0;      // H-ból kivezető összérték
-            list<int> inside;       //Csúcsok amik a nyélben vannak
-            list<int> infto1;       //Csúcsok amik kevesebb mint 1-el látják a nyelet
-            list<int> subto1;
-            //Csúcsok amik  legalább 1-el látják a nyelet, és vagy nincs egyész élük, vagy 1.66-nál jobban látják
-            list<int> extremof1;    //Csúcsok amikhez vezet 1 széles út
+            vector<int> pos;
+            //Denotes where the current node is. 0: inside 1: subto1 2: infto1 3: extremof1
 
-            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n, 0)
+            vector<int> is_odd;         // Ha nem odd csúcs 0, egyébként hány csúcs teszi oddá;
+            vector<int> pointer_to_outside; // Melyik csúcs a kinti 1-el látott szomszéd, ha is_odd > 0
+            vector<int> pointer_to_odd; // Általában O.n, ha a csúcs extrém akkor a e helyén az van kit tesz odd-á
+            int size = 0; // Size of the currently built Handle.
+
+            maxback_Handle_growing(Algorithm& O, int i, int j) : O(), maxbackval(O.n + 1, 0), pos(O.n, 2),
+                                                                 is_odd(O.n+1, 0), pointer_to_odd(O.n, O.n)
             {
-                vector<int> temp_infto1(O.n, 1);
-                vector<int> temp_extremof1(O.n, 0);
                 //Init
-                inside.push_back(i);
+                pos[i] = 0;
+                pos[j] = 3;
+
                 for (ListDigraph::OutArcIt a(O.G, O.V[i]); a != INVALID; ++a)
                 {
                     double x_a = 0;
@@ -534,11 +544,14 @@ namespace BnCnP
                         continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
                     }
                     const int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
-                    maxbackval[t] = x_a;
+                    maxbackval[t] += x_a;
                     if (x_a == 1)
                     {
-                        temp_extremof1[t] = 1;
-                        temp_infto1[t] = 0;
+                        pointer_to_outside[i] = t;      // i-nek mostantól t a kinti 1-el látott szomszédja
+                        ++is_odd[i];
+                        --is_odd[pointer_to_odd[t]];
+                        pointer_to_odd[t] = i;
+                        pos[t] = 3;
                     }
                     coboundary += x_a;
                 }
@@ -554,54 +567,21 @@ namespace BnCnP
                     maxbackval[s] += x_a;
                     if (x_a == 1)
                     {
-                        temp_extremof1[s] = 1;
-                        temp_infto1[s] = 0;
+                        pos[s] = 3;
+                        pointer_to_outside[i] = s;      // i-nek mostantól s a kinti 1-el látott szomszédja
+                        ++is_odd[i];
+                        --is_odd[pointer_to_odd[s]];
+                        pointer_to_odd[s] = i;
                     }
                     if (maxbackval[s] >= 1)
                     {
-                        if (maxbackval[s] >= 1.66)
+                        if (maxbackval[s] >= 1.66 || pos[s] != 3)
                         {
-                            subto1.push_back(s);
-                            temp_extremof1[s] = 0;
-                            temp_infto1[s] = 0;
-                        }
-                        else if (temp_extremof1[s] != 1)
-                        {
-                            subto1.push_back(s);
-                            temp_infto1[s] = 0;
+                            pos[s] = 1;
                         }
                     }
                     coboundary += x_a;
                 }
-
-                subto1.sort(subto1.begin(), subto1.end(), [&](const int& a, const int& b)
-                {
-                    return maxbackval[a] < maxbackval[b];
-                });
-
-                for (size_t k = 0; k < temp_infto1.size(); ++k)
-                {
-                    if (temp_infto1[k] >= 1)
-                    {
-                        infto1.push_back(k);
-                    }
-                }
-                infto1.sort(infto1.begin(), infto1.end(), [&](const int& a, const int& b)
-                {
-                    return maxbackval[a] < maxbackval[b];
-                });
-
-                for (size_t k = 0; k < temp_extremof1.size(); ++k)
-                {
-                    if (temp_extremof1[k] >= 1)
-                    {
-                        extremof1.push_back(k);
-                    }
-                }
-                extremof1.sort(extremof1.begin(), extremof1.end(), [&](const int& a, const int& b)
-                {
-                    return maxbackval[a] < maxbackval[b];
-                });
 
             }
 
@@ -612,48 +592,101 @@ namespace BnCnP
                 - Frissíteni kell a coboundary értéket (Kivonni ami bele ment (Ez pont a maxback érték, És hozzáadni amí kimegy))
             */
             {
-                // Menjünk végig a listákon
 
-                for (auto it = infto1.begin(); it != infto1.end();) {
-                    if () {
-                        it = infto1.erase(it);
-                    } else {
-                        ++it;
+                --is_odd[pointer_to_odd[v]];    // Ha v tett valakit odd csúccsá az ne legyen az
+                pos[v] = 0; ++size;             // Mostantól benne van, eggyel nőtt a nyél
+                coboundary -= maxbackval[v];    // Pont annyival járult hozzá a vágás értékéhez amennyivel látjuk
+                for (ListDigraph::InArcIt a(O.G, O.V[v]); a != INVALID; ++a)    // Nézzük végig az éleit
+                {
+                    double x_a = 0;
+                    if (!O.IsCol[a] || (x_a = O.coreLP.primal(O.Col[a])) == 0)
+                    {
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 menjünk tovább
+                    }
+                    const int s = O.Label[O.G.source(static_cast<ListDigraphBase::Arc>(a))];
+
+                    maxbackval[s] += x_a;
+                    if (pos[s] == 0){continue;} // Ha benne van biztos nem kerül ki
+                    coboundary += x_a;          // Ha itt járunk kívül van hozzáadjuk az él értékét a vágáshoz
+                    if (x_a == 1)               // Ha az él egy legyen extrém csúcs, de ezt később felülírhatjuk
+                    {
+                        pointer_to_outside[v] = s;      // v-nek mostantól s a kinti 1-el látott szomszédja
+                        ++is_odd[v];
+                        --is_odd[pointer_to_odd[s]];
+                        pointer_to_odd[s] = v;
+                        pos[s] = 3;
+                    }
+                    if ((maxbackval[s] >= 1 && pos[s] != 3) || maxbackval[s] >= 1.66)
+                        // Ha nagyon látjuk, vagy eléggé látjuk és nem extrém legyen subto1
+                    {
+                        pos[s] = 1;
                     }
                 }
 
+                for (ListDigraph::OutArcIt a(O.G, O.V[v]); a != INVALID; ++a)    // Nézzük végig a másik irányú éleit
+                {
+                    double x_a = 0;
+                    if (!O.IsCol[a] || (x_a = O.coreLP.primal(O.Col[a])) == 0)
+                    {
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 menjünk tovább
+                    }
+                    const int t = O.Label[O.G.target(static_cast<ListDigraphBase::Arc>(a))];
+
+                    maxbackval[t] += x_a;
+                    if (pos[t] == 0){continue;} // Ha benne van biztos nem kerül ki
+                    coboundary += x_a;          // Ha itt járunk kívül van hozzáadjuk az él értékét a vágáshoz
+                    if (x_a == 1)               // Ha az él egy legyen extrém csúcs, de ezt később felülírhatjuk
+                    {
+                        pos[t] = 3;
+                        pointer_to_outside[v] = t;      // v-nek mostantól t a kinti 1-el látott szomszédja
+                        ++is_odd[v];
+                        --is_odd[pointer_to_odd[t]];  //Egy csúcs mindig max egy csúcsot tegyen oddá
+                        pointer_to_odd[t] = v;
+                    }
+                    if ((maxbackval[t] >= 1 && pos[t] != 3) || maxbackval[t] >= 1.66)
+                        // Ha nagyon látjuk, vagy eléggé látjuk és nem extrém, legyen subto1
+                    {
+                        pos[t] = 1;
+                    }
+                }
             };
 
             bool produce()
             {
-                 while(std::abs(coboundary / 2 - std::round(coboundary)) <= 0.2)
-                     //Legalább 0.2-re van visszadjuk, ha nem növeljük e legjobban láttot subto1 élel.
-                 {
-                     int new_v;
-                     if (subto1.size() != 0)
+
+                 do
                      {
-                         new_v = subto1.back();
-                         subto1.pop_back();
-                     }else if (infto1.size() != 0)
+                     int new_v{O.n};
+                     vector<int> Candidates(4, O.n);
+                     //Csinálunk egy vektort ami eltárolja minden tipusból a legjobb értékű indexét
+
+                     for (int i = 0; i < O.n; ++i) // Nézzük végig az összes csúcsot
                      {
-                         new_v = infto1.back();
-                         infto1.pop_back();
-                     }else if (extremof1.size() != 0)
-                     {
-                         new_v = extremof1.back();
-                         extremof1.pop_back();
-                     }
-                     if (inside.size() >= O.n/2)
-                     {
-                         break;
+                         if (pos[i]) //Ha nem belső csúcs
+                         {
+                             if (maxbackval[Candidates[pos[i]]] <= maxbackval[i])
+                                 // Nézzük meg, hogy az ilyen tipus legjobbnál jobb-e
+                             {
+                                 Candidates[pos[i]] = i;
+                             }
+                         }
                      }
 
-                     add_node_to_handle(new_v);
 
+                     int j = 1;
+                     //Melyiket rakjuk be, Ha van subto1 biztos azt, ha van infto1 azt, egyébként egy extremof1
+                     while (Candidates[j] == O.n)
+                     {
+                         ++j;
+                     }
+                     new_v = Candidates[j];
+                     this->add_node_to_handle(new_v);
+                     }
+                while(std::abs(coboundary / 2 - std::round(coboundary)) <= 0.2 && size < O.n/2);
+                //Legalább 0.2-re van a legközelebbi páros egésztől visszadjuk, ha nem növeljünk.
+                //Mindig tudunk növelni mert a halmazok az összes csúcsot tartalmazzák
 
-                }
-
-                if (inside.size() < O.n/2)
+                if (size < O.n/2) // A nyél legfeljebb n/2 nagy legyen.
                 {
                     return true;
                 }
@@ -664,30 +697,102 @@ namespace BnCnP
         void lookforteeth(maxback_Handle_growing& H)
         {
             int num_of_found_teeth = 0;
-            int target_num_of_teeth = std::floor(H.coboundary / 2.0) * 2.0 + 1.0;
 
-            vector<int> status(n, 0); // 0: authorized, 1 odd, 2 forbiden
-            for (int i : H.extremof1)
+            int target_num_of_teeth = std::floor(H.coboundary / 2.0) * 2.0 + 1.0;
+            //A keresett fogak száma 2k+1 ha 2k < H.coboundary < 2k+2
+            std::vector<boost::dynamic_bitset<>> teeth(target_num_of_teeth, boost::dynamic_bitset<>(n));
+            //A Lendő fogak vektora.
+
+            list<int> starting_points;
+            // Ezekeből a csúcsokból fogunk elkezdeni fogat növeszteni
+
+            vector<int> status(n, 0); // 0: authorized, 1 odd, 2 forbidden, 3 extrem csúcs
+            for (int i = 0; i < n; ++i)
             {
-                status[i] = 1;
+                if (H.is_odd[i] > 0)
+                {
+                    starting_points.push_back(i);
+                    status[i] = 1;
+                }else
+                {
+                    if (H.pos[i] == 3)
+                    {
+                        status[i] = 3;
+                    }else
+                    {
+                        status[i] = 0;
+                    }
+                }
             }
 
-            while (num_of_found_teeth < target_num_of_teeth)
+            while ((num_of_found_teeth < target_num_of_teeth) && (starting_points.size() != 0))
+                // Legyenek a fogak a kifele 1 él csúcsai
             {
-                int start;
-                    if (H.extremof1.size() != 0)
-                    {
-                        start = H.extremof1.back();
-                        H.extremof1.pop_back();
-                    }else if (H.subto1.size() != 0)
-                    {
+                int t_1 = starting_points.back();
+                starting_points.pop_back();
+                int t_2 = H.pointer_to_outside[t_1];
+                teeth[num_of_found_teeth].set(t_1);
+                teeth[num_of_found_teeth].set(t_2);
+                status[t_1] = status[t_2] = 2;
+                ++num_of_found_teeth;
+            }
 
+            //Ha nincs elég ilyen csúcs vegyünk be maxback növesztett fogakat.
+            int num_of_nodes_available = H.size - num_of_found_teeth; //Vigyázzunk ne fogyanak el a H-beli csúcsok
+
+            while (num_of_found_teeth < target_num_of_teeth &&
+                (target_num_of_teeth - num_of_found_teeth) < num_of_nodes_available)
+                //Ha kell még fog és van rá csúcs
+            {
+                // Keressünk olyan nem tiltott csúcsot aminek minimális a maxback értéke H-ban
+                int i = 0;
+                for (; i < n; ++i)
+                {
+                    if (H.pos[i] == 0 && status[i] == 0)
+                    {
+                        break;
                     }
+                }
+
+                for (int j = i+1; j < n; ++j)
+                {
+                    if (H.maxbackval[i] > H.maxbackval[j] && H.pos[j] == 0 && status[j] == 0)
+                    {
+                        i = j;
+                    }
+                }
 
 
+                // Kezdjünk el ebből max_back növelni
+                vector<int> tooth_max_back(n, 0);
+                double coboundary = 0;
 
+                for (ListDigraph::OutArcIt a(G, V[i]); a != INVALID; ++a)
+                {
+                    double x_a = 0;
+                    if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
+                    {
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                    }
+                    const int t = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
+                    tooth_max_back[t] += x_a;
+                    coboundary += x_a;
+                }
+
+                for (ListDigraph::OutArcIt a(G, V[i]); a != INVALID; ++a)
+                {
+                    double x_a = 0;
+                    if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
+                    {
+                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                    }
+                    const int t = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
+                    tooth_max_back[t] += x_a;
+                    coboundary += x_a;
+                }
             }
         }
+
 
         bool Comb_separation(const vector<int>& IN,const vector<int>& OUT) //Returns true if comb ineqs are found
         {
@@ -716,15 +821,10 @@ namespace BnCnP
             {
                 maxback_Handle_growing H_factory = potential_handles.back();
                 potential_handles.pop_back();
-                if (std::abs(H_factory.coboundary / 2 - std::round(H_factory.coboundary)) > 0.2)
-                //Ha legalább 0.2-re van keressünk fogakat
-                {
-                    //fogak keresése
-                }
 
                 while (H_factory.produce())
                 {
-                    //fogak keresése       lookforteeth(H_factory)
+                    //lookforteeth(H_factory);
                 }
             }
 
@@ -738,6 +838,7 @@ namespace BnCnP
             ListDigraph::Node t = G.target(Columns[i].first);
             if constexpr (BRANCHING == 1)
             {
+                logger.log("Branching on InArcs of node ", Label[t]);
                 vector<size_t> Candidate_arcs;
                 vector<size_t> Unused_tarcs;
                 for (size_t j = 0; j < Columns.size(); j++)
@@ -978,7 +1079,7 @@ namespace BnCnP
             const double _Upper_bound = std::numeric_limits<double>::max(),
             const int sep = 1000,
             const int col = 10,
-            const int exploring_steps = 100,
+            const int exploring_steps = 10,
             const size_t _initarcs = 15) : G(_G),
                                            Label(_Label),
                                            weight(_weight),
