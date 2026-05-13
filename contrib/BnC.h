@@ -744,7 +744,7 @@ namespace BnCnP
                 (target_num_of_teeth - num_of_found_teeth) < num_of_nodes_available)
                 //Ha kell még fog és van rá csúcs
             {
-                // Keressünk olyan nem tiltott csúcsot aminek minimális a maxback értéke H-ban
+                // Keressünk olyan nem tiltott csúcsot aminek minimális a maxback értéke H-ban.
                 int i = 0;
                 for (; i < n; ++i)
                 {
@@ -762,33 +762,104 @@ namespace BnCnP
                     }
                 }
 
+                // Kezdjünk el ebből max_back növelni, úgy hogy legyen benne legalább egy külső csúcs
+                // és ne legyen 1-el vagy annál jobban látott csúcs?
 
-                // Kezdjünk el ebből max_back növelni
+                // Itt inicializálunk a folyamatot
+
                 vector<int> tooth_max_back(n, 0);
                 double coboundary = 0;
+                int tooth_size = 0; // figyeljünk rá hogy a fog értelmes méretű maradjon
+                int tooth_inside_size = 0; // Ha megeszi az összes nyél beli csúcsot amikor kell még fog az is baj lehet
+                bool skip_H = false; // Átugorjuk e a H-beli csúcsokat
 
-                for (ListDigraph::OutArcIt a(G, V[i]); a != INVALID; ++a)
-                {
-                    double x_a = 0;
-                    if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
-                    {
-                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
-                    }
-                    const int t = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
-                    tooth_max_back[t] += x_a;
-                    coboundary += x_a;
-                }
+                vector<int> subto1(n, 0);
+                int pointer_to_next_subto1{n};
+                // Csúcsok amiket jobban látunk 1-nél, ezért hozzá kell majd adni
 
-                for (ListDigraph::OutArcIt a(G, V[i]); a != INVALID; ++a)
+                auto add_node_explicit = [&, num_of_found_teeth](int i)
                 {
-                    double x_a = 0;
-                    if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
+                    // Itt Updatelünk mindent (maxbackval, subto1 lista, kifok, sizok)
+                    coboundary -= tooth_max_back[i];
+                    tooth_size++;
+                    if (H.pos[i] == 0){ tooth_inside_size++; }
+
+                    for (ListDigraph::InArcIt a(G, V[i]); a != INVALID; ++a)
                     {
-                        continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                        double x_a = 0;
+                        if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
+                        {
+                            continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                        }
+                        const int s = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
+                        tooth_max_back[s] += x_a;
+                        if (tooth_max_back[s] >= 1 && status[s] == 0 && teeth[num_of_found_teeth][s] == 0 )
+                        {
+                            subto1[s] == 1;
+                            if (s < pointer_to_next_subto1){ pointer_to_next_subto1 = s; }
+                        }
+                        coboundary += x_a;
                     }
-                    const int t = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
-                    tooth_max_back[t] += x_a;
-                    coboundary += x_a;
+
+                    for (ListDigraph::OutArcIt a(G, V[i]); a != INVALID; ++a)
+                    {
+                        double x_a = 0;
+                        if (!IsCol[a] || (x_a = coreLP.primal(Col[a])) == 0)
+                        {
+                            continue; //Ha $a$ nem oszlop vagy x_a = 0 marad 0
+                        }
+                        const int t = Label[G.target(static_cast<ListDigraphBase::Arc>(a))];
+                        tooth_max_back[t] += x_a;
+                        if (tooth_max_back[t] >= 1 && status[t] == 0 && teeth[num_of_found_teeth][t] == 0 && (!skip_H ||
+                            H.pos[t] != 0))
+                        {
+                            subto1[t] == 1;
+                            if (t < pointer_to_next_subto1){ pointer_to_next_subto1 = t; }
+                        }
+                        coboundary += x_a;
+                    }
+
+                    //Itt kerül a fogba bele.
+                    teeth[num_of_found_teeth].set(i);
+                };
+
+                auto maxback_grow_node = [&]() -> bool
+                {
+                    if (pointer_to_next_subto1 == n || coboundary < 2.3 || (tooth_size >= n / 2))
+                    {
+                        return false;
+                    }
+
+                    const int q = pointer_to_next_subto1;
+
+                    //frissítsük subto1-t
+                    subto1[q] = 0;
+                    while (subto1[pointer_to_next_subto1] == 0 && pointer_to_next_subto1 < n)
+                    {
+                        pointer_to_next_subto1++;
+                    }
+
+                    if (!((target_num_of_teeth - num_of_found_teeth - 1) >= tooth_inside_size && H.pos[q] == 0))
+                        // Ne tegyünk be több nyél beli csúcsot ha már csak annyi van amivel pont be lehet fejezni.
+                    {
+                        add_node_explicit(q);
+                    }else
+                    {
+                        skip_H = true;
+                    }
+                    return true;
+                };
+
+                // Fésű nővesztése
+                add_node_explicit(i); // Min látott csúcs hozzáadaása
+                while (maxback_grow_node){} //Növesztés
+
+                if (coboundary < 3)
+                {
+                    num_of_found_teeth++;
+                }else
+                {
+                    teeth[num_of_found_teeth].reset();
                 }
             }
         }
@@ -824,7 +895,7 @@ namespace BnCnP
 
                 while (H_factory.produce())
                 {
-                    //lookforteeth(H_factory);
+                    lookforteeth(H_factory);
                 }
             }
 
